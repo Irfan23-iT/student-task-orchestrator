@@ -1,0 +1,12 @@
+services:
+  backend:
+    build:
+      context: ./student-task-orchestrator/backend
+      dockerfile: Dockerfile
+    env_file:
+      - ./student-task-orchestrator/backend/.env
+    environment:
+      PORT: ${BACKEND_PORT:-5000}
+    ports:
+      - "${BACKEND_PORT:-5000}:5000"
+    restart: unless-stopped
