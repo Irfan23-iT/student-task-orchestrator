@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../app/theme/app_theme.dart';
-import '../home/home_screen.dart';
+import '../../services/api_service.dart';
+import '../home/main_screen.dart';
 import 'signup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -13,9 +14,12 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  static final _emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _apiService = ApiService();
   bool _isLoading = false;
 
   @override
@@ -36,7 +40,7 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      await Supabase.instance.client.auth.signInWithPassword(
+      await _apiService.login(
         email: _emailController.text.trim(),
         password: _passwordController.text,
       );
@@ -47,18 +51,16 @@ class _LoginScreenState extends State<LoginScreen> {
 
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute<void>(
-          builder: (context) => const HomeScreen(),
-        ),
+        MaterialPageRoute<void>(builder: (context) => const MainScreen()),
       );
     } on AuthException catch (error) {
       if (!mounted) {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
     } catch (_) {
       if (!mounted) {
         return;
@@ -132,7 +134,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               return 'Email is required';
                             }
 
-                            if (!email.contains('@')) {
+                            if (!_emailPattern.hasMatch(email)) {
                               return 'Enter a valid email address';
                             }
 
@@ -149,6 +151,10 @@ class _LoginScreenState extends State<LoginScreen> {
                           validator: (value) {
                             if (value == null || value.isEmpty) {
                               return 'Password is required';
+                            }
+
+                            if (value.length < 6) {
+                              return 'Password must be at least 6 characters';
                             }
 
                             return null;
@@ -189,20 +195,36 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         const SizedBox(height: 12),
                         TextButton(
-                          onPressed: _isLoading
-                              ? null
-                              : () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute<void>(
-                                      builder: (context) =>
-                                          const SignUpScreen(),
-                                    ),
-                                  );
-                                },
-                          child: const Text(
-                            'Don\'t have an account? Sign Up',
-                          ),
+                          onPressed:
+                              _isLoading
+                                  ? null
+                                  : () async {
+                                    final messenger = ScaffoldMessenger.of(
+                                      context,
+                                    );
+                                    final didRegister =
+                                        await Navigator.push<bool>(
+                                          context,
+                                          MaterialPageRoute<bool>(
+                                            builder:
+                                                (context) =>
+                                                    const SignUpScreen(),
+                                          ),
+                                        );
+
+                                    if (!mounted || didRegister != true) {
+                                      return;
+                                    }
+
+                                    messenger.showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Registration successful!',
+                                        ),
+                                      ),
+                                    );
+                                  },
+                          child: const Text('Don\'t have an account? Sign Up'),
                         ),
                       ],
                     ),

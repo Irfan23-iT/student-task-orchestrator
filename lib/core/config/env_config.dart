@@ -11,6 +11,7 @@ class EnvConfig {
     supabaseUrl = _readRequired('SUPABASE_URL');
     supabaseAnonKey = _readRequired('SUPABASE_ANON_KEY');
     apiBaseUrl =
+        dotenv.env['API_URL'] ??
         dotenv.env['MOBILE_API_BASE_URL'] ??
         dotenv.env['API_BASE_URL'] ??
         supabaseUrl;
