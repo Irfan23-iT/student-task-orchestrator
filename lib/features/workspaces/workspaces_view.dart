@@ -225,6 +225,28 @@ class _WorkspacesViewState extends State<WorkspacesView> {
     inviteCodeController.dispose();
   }
 
+  Future<void> _shareWorkspace(WorkspaceModel workspace) async {
+    try {
+      final inviteCode = await ApiService().getWorkspaceShareLink(workspace.id);
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Invite code: $inviteCode')),
+      );
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to load invite code: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -246,6 +268,11 @@ class _WorkspacesViewState extends State<WorkspacesView> {
                         workspace.description.isEmpty
                             ? 'No description'
                             : workspace.description,
+                      ),
+                      trailing: IconButton(
+                        onPressed: () => _shareWorkspace(workspace),
+                        icon: const Icon(Icons.share_outlined),
+                        tooltip: 'Share workspace',
                       ),
                     ),
                   );

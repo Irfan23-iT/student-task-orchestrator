@@ -18,7 +18,7 @@ class ClassModel {
   factory ClassModel.fromJson(Map<String, dynamic> json) {
     return ClassModel(
       id: json['id']?.toString(),
-      dayOfWeek: _asInt(json['day_of_week'] ?? json['dayOfWeek']),
+      dayOfWeek: _asDayOfWeek(json['day_of_week'] ?? json['dayOfWeek']),
       startTime: (json['start_time'] ?? json['startTime'] ?? '').toString(),
       endTime: (json['end_time'] ?? json['endTime'] ?? '').toString(),
       className: (json['class_name'] ?? json['className'] ?? '').toString(),
@@ -29,7 +29,7 @@ class ClassModel {
   Map<String, dynamic> toJson() {
     return {
       if (id != null) 'id': id,
-      'day_of_week': dayOfWeek,
+      'day_of_week': _mapIntToDayString(dayOfWeek),
       'start_time': startTime,
       'end_time': endTime,
       'class_name': className,
@@ -37,11 +37,40 @@ class ClassModel {
     };
   }
 
-  static int _asInt(Object? value) {
+  static int _asDayOfWeek(Object? value) {
     if (value is int) {
       return value;
     }
 
-    return int.tryParse('${value ?? ''}') ?? 0;
+    final normalized = '${value ?? ''}'.trim().toUpperCase();
+    const dayMap = <String, int>{
+      'MON': 1,
+      'TUE': 2,
+      'WED': 3,
+      'THU': 4,
+      'FRI': 5,
+      'SAT': 6,
+      'SUN': 7,
+    };
+
+    if (dayMap.containsKey(normalized)) {
+      return dayMap[normalized]!;
+    }
+
+    return int.tryParse(normalized) ?? 0;
+  }
+
+  static String _mapIntToDayString(int day) {
+    const dayMap = <int, String>{
+      1: 'MON',
+      2: 'TUE',
+      3: 'WED',
+      4: 'THU',
+      5: 'FRI',
+      6: 'SAT',
+      7: 'SUN',
+    };
+
+    return dayMap[day] ?? 'MON';
   }
 }

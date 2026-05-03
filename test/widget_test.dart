@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:rakanstudent_mobile/features/auth/login_screen.dart';
 import 'package:rakanstudent_mobile/features/auth/signup_screen.dart';
 import 'package:rakanstudent_mobile/features/home/dashboard_view.dart';
+import 'package:rakanstudent_mobile/features/profile/profile_view.dart';
 import 'package:rakanstudent_mobile/features/schedule/schedule_view.dart';
 import 'package:rakanstudent_mobile/features/tasks/tasks_view.dart';
 import 'package:rakanstudent_mobile/features/timer/timer_sheet.dart';
@@ -47,12 +48,13 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    expect(find.text('Pending Tasks'), findsOneWidget);
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('Next Class'), findsOneWidget);
-    expect(find.text('No classes scheduled'), findsOneWidget);
-    expect(find.text('Sign Out'), findsOneWidget);
+    expect(find.text('Good morning'), findsOneWidget);
     expect(find.text('Focus Mode'), findsOneWidget);
+    expect(find.text('QUICK OVERVIEW'), findsOneWidget);
+    expect(find.text('ACTIVE REMINDERS'), findsOneWidget);
+    expect(find.text('Tasks Pending'), findsOneWidget);
+    expect(find.text('No classes scheduled'), findsOneWidget);
+    expect(find.text('View All'), findsOneWidget);
   });
 
   testWidgets('Timer sheet renders controls and automated test runs', (
@@ -73,19 +75,34 @@ void main() {
     expect(find.text('25:00'), findsOneWidget);
   });
 
-  testWidgets('Tasks view renders add task affordance', (tester) async {
+  testWidgets('Tasks view renders new shell controls', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: TasksView()));
 
     await tester.pumpAndSettle();
 
-    expect(find.byType(FloatingActionButton), findsOneWidget);
+    expect(find.text('Tasks'), findsOneWidget);
+    expect(find.text('AI Orchestrator'), findsOneWidget);
+    expect(find.text('Generate'), findsOneWidget);
+    expect(find.text('Sync to Calendar'), findsOneWidget);
+    expect(find.text('Delete All'), findsOneWidget);
   });
 
-  testWidgets('Schedule view renders app bar shell', (tester) async {
+  testWidgets('Schedule view renders new shell copy', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: ScheduleView()));
 
     await tester.pumpAndSettle();
 
-    expect(find.text('My Schedule'), findsOneWidget);
+    expect(find.text('Schedule'), findsOneWidget);
+    expect(find.text('Your fixed weekly classes'), findsOneWidget);
+  });
+
+  testWidgets('Profile view renders new shell copy', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: ProfileView()));
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('Profile'), findsOneWidget);
+    expect(find.text('Sleep Schedule'), findsOneWidget);
+    expect(find.text('Integrations'), findsOneWidget);
   });
 }

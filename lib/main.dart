@@ -12,11 +12,11 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await dotenv.load(fileName: '.env');
+  await EnvConfig.initialize();
   await Supabase.initialize(
-    url: dotenv.env['SUPABASE_URL']!,
-    anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
+    url: EnvConfig.supabaseUrl,
+    anonKey: EnvConfig.supabaseAnonKey,
   );
-  EnvConfig.initialize();
 
   runApp(const ProviderScope(child: _StudentTaskOrchestratorApp()));
 }
@@ -29,6 +29,9 @@ class _StudentTaskOrchestratorApp extends StatelessWidget {
     return MaterialApp(
       title: 'RakanStudent Mobile',
       debugShowCheckedModeBanner: false,
+      routes: {
+        '/login': (_) => const LoginScreen(),
+      },
       theme: ThemeData(
         useMaterial3: true,
         colorSchemeSeed: Colors.deepPurple,
