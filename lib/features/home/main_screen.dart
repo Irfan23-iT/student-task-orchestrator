@@ -5,6 +5,7 @@ import '../profile/profile_view.dart';
 import '../schedule/schedule_view.dart';
 import '../tasks/tasks_view.dart';
 import 'dashboard_view.dart';
+import '../../views/ai_chat_view.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -16,12 +17,13 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
 
-  static const _titles = <String>['Home', 'Schedule', 'Tasks', 'Profile'];
+  static const _titles = <String>['Home', 'Schedule', 'Tasks', 'AI', 'Profile'];
 
   static const _screens = <Widget>[
     DashboardView(),
     ScheduleView(),
     TasksView(),
+    AiChatView(),
     ProfileView(),
   ];
 
@@ -148,8 +150,13 @@ class _MainScreenState extends State<MainScreen> {
           ),
           _buildNavButton(
             index: 3,
-            icon: Icons.person_rounded,
+            icon: Icons.auto_awesome_rounded,
             label: _titles[3],
+          ),
+          _buildNavButton(
+            index: 4,
+            icon: Icons.person_rounded,
+            label: _titles[4],
           ),
         ],
       ),

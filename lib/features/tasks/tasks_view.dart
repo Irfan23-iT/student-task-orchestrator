@@ -18,9 +18,11 @@ class TasksView extends StatefulWidget {
 class _TasksViewState extends State<TasksView> {
   final ApiService _apiService = ApiService();
   final TextEditingController _goalController = TextEditingController();
+  final TextEditingController _manualTaskController = TextEditingController();
 
   List<Task> _tasks = const [];
   bool _isLoading = true;
+  bool _isCreatingTask = false;
   bool _isGenerating = false;
   bool _isSyncingCalendar = false;
 
@@ -35,6 +37,7 @@ class _TasksViewState extends State<TasksView> {
   @override
   void dispose() {
     _goalController.dispose();
+    _manualTaskController.dispose();
     super.dispose();
   }
 
@@ -52,7 +55,7 @@ class _TasksViewState extends State<TasksView> {
 
   Future<void> _fetchTasks() async {
     try {
-      final response = await _apiService.fetchTaskRows();
+      final response = await _apiService.getTasks();
       final tasks = response.map(Task.fromJson).toList(growable: false);
       await NotificationService.instance.scheduleTaskReminders(tasks);
 
@@ -89,10 +92,58 @@ class _TasksViewState extends State<TasksView> {
   Future<void> _runCleanupVerification() async {
     try {
       print('--- CODEX CLEANUP TEST START ---');
-      await _apiService.fetchTaskRows();
+      await _apiService.getTasks();
       print('--- CODEX CLEANUP SUCCESS: Tasks fetched from API ---');
     } catch (e) {
       print('--- CODEX CLEANUP TEST FAILED: $e ---');
+    }
+  }
+
+  Future<void> _createManualTask() async {
+    final title = _manualTaskController.text.trim();
+    if (title.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Enter a task title.')));
+      return;
+    }
+
+    setState(() {
+      _isCreatingTask = true;
+    });
+
+    try {
+      await _apiService.createTask({
+        'title': title,
+        'priorityLevel': 'Medium',
+        'status': 'Pending',
+      });
+      _manualTaskController.clear();
+      await _fetchTasks();
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Task created')));
+    } on SocketException {
+      _showNetworkErrorSnackBar();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Unable to create task: $error')));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCreatingTask = false;
+        });
+      }
     }
   }
 
@@ -591,6 +642,58 @@ class _TasksViewState extends State<TasksView> {
                 ),
               ),
               const SizedBox(height: 20),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.08),
+                      blurRadius: 18,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _manualTaskController,
+                        textInputAction: TextInputAction.done,
+                        onSubmitted: (_) {
+                          if (!_isCreatingTask) {
+                            _createManualTask();
+                          }
+                        },
+                        decoration: const InputDecoration(
+                          labelText: 'Task title',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    IconButton.filled(
+                      onPressed: _isCreatingTask ? null : _createManualTask,
+                      icon:
+                          _isCreatingTask
+                              ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                              : const Icon(Icons.add_rounded),
+                      tooltip: 'Add task',
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(18),

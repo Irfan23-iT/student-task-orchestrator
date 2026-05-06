@@ -446,6 +446,116 @@ class ApiService {
     return rows.whereType<Map<String, dynamic>>().toList(growable: false);
   }
 
+  Future<List<Map<String, dynamic>>> getTasks() async {
+    final headers = await _getHeaders();
+    const url = '$baseUrl/tasks';
+    _logFetch(url);
+    var response = await http
+        .get(Uri.parse(url), headers: headers)
+        .timeout(const Duration(seconds: 5));
+
+    if (response.statusCode == 401) {
+      final refreshedToken = await _getValidAccessToken(forceRefresh: true);
+      response = await http
+          .get(
+            Uri.parse(url),
+            headers: {
+              'Content-Type': 'application/json',
+              if (refreshedToken != null)
+                'Authorization': 'Bearer $refreshedToken',
+            },
+          )
+          .timeout(const Duration(seconds: 5));
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        'Task fetch failed: ${response.statusCode} ${response.body}',
+      );
+    }
+
+    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    final tasks = decoded['tasks'] as List<dynamic>? ?? const [];
+    return tasks.whereType<Map<String, dynamic>>().toList(growable: false);
+  }
+
+  Future<Map<String, dynamic>> createTask(Map<String, dynamic> taskData) async {
+    final headers = await _getHeaders();
+    const url = '$baseUrl/tasks';
+    var response = await http
+        .post(Uri.parse(url), headers: headers, body: jsonEncode(taskData))
+        .timeout(const Duration(seconds: 5));
+
+    if (response.statusCode == 401) {
+      final refreshedToken = await _getValidAccessToken(forceRefresh: true);
+      response = await http
+          .post(
+            Uri.parse(url),
+            headers: {
+              'Content-Type': 'application/json',
+              if (refreshedToken != null)
+                'Authorization': 'Bearer $refreshedToken',
+            },
+            body: jsonEncode(taskData),
+          )
+          .timeout(const Duration(seconds: 5));
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        'Task creation failed: ${response.statusCode} ${response.body}',
+      );
+    }
+
+    _emitTaskMutation();
+    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    return decoded['task'] as Map<String, dynamic>? ?? decoded;
+  }
+
+  Future<String> sendChatMessage(String message) async {
+    final trimmedMessage = message.trim();
+    if (trimmedMessage.isEmpty) {
+      throw ArgumentError('Message is required.');
+    }
+
+    final headers = await _getHeaders();
+    const url = '$baseUrl/ai/chat';
+    final body = {'message': trimmedMessage};
+    var response = await http
+        .post(Uri.parse(url), headers: headers, body: jsonEncode(body))
+        .timeout(const Duration(seconds: 30));
+
+    if (response.statusCode == 401) {
+      final refreshedToken = await _getValidAccessToken(forceRefresh: true);
+      response = await http
+          .post(
+            Uri.parse(url),
+            headers: {
+              'Content-Type': 'application/json',
+              if (refreshedToken != null)
+                'Authorization': 'Bearer $refreshedToken',
+            },
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 30));
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        'AI chat failed: ${response.statusCode} ${response.body}',
+      );
+    }
+
+    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    final aiResponse =
+        (decoded['response'] ?? decoded['message'] ?? '').toString().trim();
+    if (aiResponse.isEmpty) {
+      throw Exception('AI chat returned an empty response.');
+    }
+
+    return aiResponse;
+  }
+
   Future<void> updateSubTaskCompletion({
     required String id,
     required bool completed,

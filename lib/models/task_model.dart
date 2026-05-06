@@ -36,7 +36,7 @@ class Task {
         json['estimated_minutes'] ?? json['duration_minutes'],
       ),
       priorityBand: _asNullableString(
-        json['priority_band'] ?? json['priority'],
+        json['priority_band'] ?? json['priority_level'] ?? json['priority'],
       ),
       priorityReason: _asNullableString(json['priority_reason']),
       dueDate: _resolveDueDate(json),

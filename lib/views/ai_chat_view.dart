@@ -1,0 +1,224 @@
+import 'package:flutter/material.dart';
+
+import '../services/api_service.dart';
+
+class AiChatView extends StatefulWidget {
+  const AiChatView({super.key});
+
+  @override
+  State<AiChatView> createState() => _AiChatViewState();
+}
+
+class _ChatMessage {
+  const _ChatMessage({required this.text, required this.isUser});
+
+  final String text;
+  final bool isUser;
+}
+
+class _AiChatViewState extends State<AiChatView> {
+  final ApiService _apiService = ApiService();
+  final TextEditingController _messageController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+
+  final List<_ChatMessage> _messages = [
+    _ChatMessage(
+      text: 'Ask me about today, priorities, or what to tackle next.',
+      isUser: false,
+    ),
+  ];
+  bool _isSending = false;
+
+  @override
+  void dispose() {
+    _messageController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _scrollToBottom() async {
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+    if (!_scrollController.hasClients) {
+      return;
+    }
+
+    await _scrollController.animateTo(
+      _scrollController.position.maxScrollExtent,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+    );
+  }
+
+  Future<void> _sendMessage() async {
+    final text = _messageController.text.trim();
+    if (text.isEmpty || _isSending) {
+      return;
+    }
+
+    setState(() {
+      _messages.add(_ChatMessage(text: text, isUser: true));
+      _isSending = true;
+    });
+    _messageController.clear();
+    await _scrollToBottom();
+
+    try {
+      final response = await _apiService.sendChatMessage(text);
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _messages.add(_ChatMessage(text: response, isUser: false));
+      });
+      await _scrollToBottom();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _messages.add(
+          _ChatMessage(
+            text: 'I could not reach the AI assistant right now.',
+            isUser: false,
+          ),
+        );
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('AI chat failed: $error')));
+      await _scrollToBottom();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSending = false;
+        });
+      }
+    }
+  }
+
+  Widget _buildMessageBubble(_ChatMessage message) {
+    final theme = Theme.of(context);
+    final alignment =
+        message.isUser ? Alignment.centerRight : Alignment.centerLeft;
+    final background = message.isUser ? const Color(0xFF111827) : Colors.white;
+    final foreground = message.isUser ? Colors.white : const Color(0xFF111827);
+
+    return Align(
+      alignment: alignment,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 300),
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: background,
+            borderRadius: BorderRadius.only(
+              topLeft: const Radius.circular(18),
+              topRight: const Radius.circular(18),
+              bottomLeft: Radius.circular(message.isUser ? 18 : 4),
+              bottomRight: Radius.circular(message.isUser ? 4 : 18),
+            ),
+            boxShadow: const [
+              BoxShadow(
+                color: Colors.black12,
+                blurRadius: 10,
+                offset: Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Text(
+            message.text,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: foreground,
+              height: 1.35,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+
+    return Material(
+      color: Colors.transparent,
+      child: SafeArea(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(20, 18, 20, 92 + bottomPadding),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'AI Chat',
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF111827),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Expanded(
+                child: ListView.builder(
+                  controller: _scrollController,
+                  itemCount: _messages.length,
+                  itemBuilder:
+                      (context, index) => _buildMessageBubble(_messages[index]),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 16,
+                      offset: Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _messageController,
+                        minLines: 1,
+                        maxLines: 4,
+                        textInputAction: TextInputAction.send,
+                        onSubmitted: (_) => _sendMessage(),
+                        decoration: const InputDecoration(
+                          hintText: 'What do I have to do today?',
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12),
+                        ),
+                      ),
+                    ),
+                    IconButton.filled(
+                      tooltip: 'Send',
+                      onPressed: _isSending ? null : _sendMessage,
+                      icon:
+                          _isSending
+                              ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                              : const Icon(Icons.send_rounded),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

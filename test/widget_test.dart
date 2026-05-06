@@ -8,6 +8,7 @@ import 'package:rakanstudent_mobile/features/profile/profile_view.dart';
 import 'package:rakanstudent_mobile/features/schedule/schedule_view.dart';
 import 'package:rakanstudent_mobile/features/tasks/tasks_view.dart';
 import 'package:rakanstudent_mobile/features/timer/timer_sheet.dart';
+import 'package:rakanstudent_mobile/views/ai_chat_view.dart';
 
 void main() {
   testWidgets('Login screen renders expected shell copy', (tester) async {
@@ -85,6 +86,21 @@ void main() {
     expect(find.text('Generate'), findsOneWidget);
     expect(find.text('Sync to Calendar'), findsOneWidget);
     expect(find.text('Delete All'), findsOneWidget);
+  });
+
+  testWidgets('AI chat view renders chat input', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: AiChatView()));
+
+    expect(find.text('AI Chat'), findsOneWidget);
+    expect(
+      find.text('Ask me about today, priorities, or what to tackle next.'),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('Send'), findsOneWidget);
+    expect(
+      find.widgetWithText(TextField, 'What do I have to do today?'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('Schedule view renders new shell copy', (tester) async {
