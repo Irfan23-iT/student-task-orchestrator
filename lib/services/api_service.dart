@@ -250,7 +250,7 @@ class ApiService {
       'subTaskId': subTaskId,
       'title': title,
       'reminderAt': reminderAt,
-      'channel': 'email',
+      'channel': 'inbox',
     };
 
     var response = await http
