@@ -17,7 +17,7 @@ if (!supabaseUrl || !supabaseAnonKey || !supabaseKey) {
 }
 
 // Service role client for backend/background operations.
-const serviceSupabase = createClient(supabaseUrl, supabaseKey);
+export const serviceSupabase = createClient(supabaseUrl, supabaseKey);
 const supabaseContext = new AsyncLocalStorage();
 
 export const getCurrentSupabase = () => supabaseContext.getStore() ?? serviceSupabase;

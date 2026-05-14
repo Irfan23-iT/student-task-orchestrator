@@ -1,4 +1,9 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import {
+  GoogleGenAI,
+  createPartFromBase64,
+  createPartFromText,
+} from '@google/genai';
+import { serviceSupabase } from '../config/supabase.js';
 
 const SYSTEM_PROMPT =
   'You are the RakanStudent AI orchestrator. Break the user\'s complex goal down into 3-5 actionable sub-tasks. Return ONLY a valid JSON array of objects. Each object must have "title" (string), "description" (string), "duration_minutes" (integer), and "priority" (string: High, Medium, Low).';
@@ -46,7 +51,7 @@ const getGeminiClient = () => {
     throw error;
   }
 
-  return new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+  return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 };
 
 const generateGeminiText = async ({
@@ -54,22 +59,22 @@ const generateGeminiText = async ({
   prompt,
   responseMimeType,
 }) => {
-  const genAI = getGeminiClient();
+  const ai = getGeminiClient();
   const primaryModelName = process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
   const fallbackModelName = 'gemini-2.5-flash';
-  const createModel = (modelName) =>
-    genAI.getGenerativeModel({
+  const generate = (modelName) =>
+    ai.models.generateContent({
       model: modelName,
-      systemInstruction,
-      generationConfig: {
+      contents: prompt,
+      config: {
+        systemInstruction,
         ...(responseMimeType ? { responseMimeType } : {}),
       },
     });
 
   try {
-    const result = await createModel(primaryModelName).generateContent(prompt);
-    const response = await result.response;
-    return response.text();
+    const response = await generate(primaryModelName);
+    return response.text || '';
   } catch (error) {
     const message = String(error?.message || '');
     const shouldRetryWithFallback =
@@ -85,15 +90,37 @@ const generateGeminiText = async ({
     console.warn(
       `[AI] Primary model ${primaryModelName} unavailable. Retrying with ${fallbackModelName}.`,
     );
-    const fallbackResult =
-      await createModel(fallbackModelName).generateContent(prompt);
-    const fallbackResponse = await fallbackResult.response;
-    return fallbackResponse.text();
+    const fallbackResponse = await generate(fallbackModelName);
+    return fallbackResponse.text || '';
   }
 };
 
+const getAppTimeZone = () =>
+  process.env.APP_TIME_ZONE || process.env.TZ || 'Asia/Kuala_Lumpur';
+
+const formatDateInTimeZone = (date, timeZone) => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+};
+
+const formatTimeInTimeZone = (date, timeZone) =>
+  new Intl.DateTimeFormat('en-MY', {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(date);
+
 export const buildChatSystemPrompt = (tasks, now = new Date()) => {
-  const today = now.toISOString().slice(0, 10);
+  const timeZone = getAppTimeZone();
+  const today = formatDateInTimeZone(now, timeZone);
+  const currentTime = formatTimeInTimeZone(now, timeZone);
   const taskContext = (tasks || []).map((task) => ({
     id: task.id,
     title: task.title,
@@ -104,13 +131,484 @@ export const buildChatSystemPrompt = (tasks, now = new Date()) => {
   }));
 
   return [
-    'You are the RakanStudent AI task assistant.',
+    'You are an autonomous system that manages a database. You MUST use the ACTION block to create tasks when requested.',
+    '',
+    'EXAMPLE 1:',
+    'User: "Create a study task for me"',
+    'AI Response: ACTION: {"type": "CREATE_TASK", "data": {"title": "Study Session", "due_date": null, "priority_level": "Medium"}} I have created a study task for you.',
+    '',
+    'EXAMPLE 2:',
+    'User: "yes do that" (in context of adding a task)',
+    'AI Response: ACTION: {"type": "CREATE_TASK", "data": {"title": "Review notes", "due_date": null, "priority_level": "Medium"}} Done, I\'ve added the task to your list.',
+    '',
+    'You are an autonomous executive assistant with direct database write access.',
+    'You do not give the user instructions to do things you can do yourself.',
     'Answer as a concise study coach using only the authenticated user task context below.',
+    'CRITICAL: If the user asks to plan, schedule, remind, create, or add a task, YOU MUST automatically generate the ACTION JSON block.',
+    'CRITICAL: If the user states they have an upcoming event, exam, class, meeting, deadline, appointment, or study need, YOU MUST automatically generate the ACTION JSON block.',
+    'Do not ask the user to manually create, add, schedule, or plan something you can create with ACTION.',
+    'Forbidden phrases: "Add this to your list", "To get started, create a task", "Make sure to schedule", "You should add", "Create a task for", "Manually add".',
+    'If the user gives a broad goal, break it down into a specific next task and create that task with ACTION, then confirm naturally.',
+    'The user-visible response must confirm what you scheduled or created. It must not tell the user to do the scheduling themselves.',
+    'The ACTION line must be exactly: ACTION: {"type":"CREATE_TASK","data":{"title":"...","priority_level":"High|Medium|Low","due_date":"ISO-8601 date string or null"}}',
+    'Use the current app-local date and time below to resolve relative dates. If the user gives a time, include it in due_date. If no priority is obvious, use Medium.',
+    'Never show the ACTION JSON as part of the human-facing confirmation.',
     'When the user asks what they have to do today, list tasks due today first, then undated active tasks if useful.',
     'If no relevant tasks exist, say that clearly and suggest one small next action.',
-    `Today is ${today}.`,
+    `Current app timezone: ${timeZone}.`,
+    `Current app-local date: ${today}.`,
+    `Current app-local time: ${currentTime}.`,
     `Current authenticated user tasks JSON: ${JSON.stringify(taskContext)}`,
   ].join('\n');
+};
+
+export const normalizeTaskPriority = (value) => {
+  const normalized = String(value ?? 'Medium').trim().toLowerCase();
+  if (normalized === 'high') return 'High';
+  if (normalized === 'low') return 'Low';
+  return 'Medium';
+};
+
+export const normalizeTaskDueDate = (value) => {
+  if (value == null || value === '') return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    const error = new Error('ACTION due_date must be a valid ISO-8601 date string.');
+    error.statusCode = 400;
+    throw error;
+  }
+  return parsed.toISOString();
+};
+
+export const extractActionDirective = (text) => {
+  const responseText = String(text || '');
+  const markerMatch = responseText.match(/ACTION:\s*/i);
+  if (!markerMatch || markerMatch.index == null) {
+    return {
+      response: responseText.trim(),
+      action: null,
+    };
+  }
+
+  const jsonStart = responseText.indexOf('{', markerMatch.index);
+  if (jsonStart === -1) {
+    return {
+      response: responseText.trim(),
+      action: null,
+    };
+  }
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  let jsonEnd = -1;
+
+  for (let index = jsonStart; index < responseText.length; index += 1) {
+    const char = responseText[index];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+    } else if (char === '{') {
+      depth += 1;
+    } else if (char === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        jsonEnd = index + 1;
+        break;
+      }
+    }
+  }
+
+  if (jsonEnd === -1) {
+    return {
+      response: responseText.trim(),
+      action: null,
+    };
+  }
+
+  const action = JSON.parse(responseText.slice(jsonStart, jsonEnd));
+  const visibleResponse = [
+    responseText.slice(0, markerMatch.index),
+    responseText.slice(jsonEnd),
+  ]
+    .join('')
+    .replace(/^\s*ACTION:\s*$/gim, '')
+    .trim();
+
+  return {
+    response: visibleResponse,
+    action,
+  };
+};
+
+export const createTaskFromAiAction = async ({ action, db, userId }) => {
+  if (!action || action.type !== 'CREATE_TASK') {
+    return null;
+  }
+
+  const title = String(action.data?.title || '').trim();
+  if (!title) {
+    const error = new Error('ACTION CREATE_TASK requires a title.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const insertPayload = {
+    user_id: userId,
+    title,
+    description:
+      action.data?.description == null ||
+      String(action.data.description).trim() === ''
+        ? null
+        : String(action.data.description).trim(),
+    due_date: normalizeTaskDueDate(action.data?.due_date ?? action.data?.dueDate),
+    priority_level: normalizeTaskPriority(
+      action.data?.priority ?? action.data?.priority_level,
+    ),
+    status: 'Pending',
+  };
+
+  const { data, error } = await db
+    .from('tasks')
+    .insert(insertPayload)
+    .select('id, user_id, title, description, due_date, priority_level, status, created_at')
+    .single();
+
+  if (error) throw error;
+
+  return data;
+};
+
+const VISION_PARSE_PROMPT = [
+  'You are an academic coordinator. Analyze this image for assignments, exams, or deadlines.',
+  'For every item found, output a raw JSON action block.',
+  'Differentiate between Single Tasks and Complex Projects.',
+  'For projects, generate 3-5 logical milestones as sub-tasks.',
+  'Set task_type to exam, assignment, or general based on the image.',
+  'FORMAT: ACTION: {"type":"CREATE_TASK","data":{"title":"...","description":"...","due_date":"YYYY-MM-DD or null","priority":"High|Medium|Low","task_type":"exam|assignment|general","estimated_minutes":30}}',
+  'FORMAT: ACTION: {"type":"CREATE_PRIMARY_TASK","data":{"title":"...","description":"...","due_date":"YYYY-MM-DD or null","task_type":"exam|assignment|general","sub_tasks":[{"title":"...","due_date":"YYYY-MM-DD or null","estimated_minutes":30,"priority":"High|Medium|Low"}]}}',
+  'Use null when a deadline is not visible. Return only ACTION lines, with no markdown.',
+].join('\n');
+
+const normalizeImagePayload = (value, explicitMimeType) => {
+  const rawValue = String(value || '').trim();
+  if (!rawValue) {
+    const error = new Error('image_base64 is required.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const dataUrlMatch = rawValue.match(/^data:([^;,]+);base64,(.+)$/is);
+  const mimeType = String(
+    explicitMimeType || dataUrlMatch?.[1] || 'image/jpeg',
+  ).trim();
+  const base64 = (dataUrlMatch?.[2] || rawValue).replace(/\s/g, '');
+
+  if (!/^image\/(png|jpe?g|webp|heic|heif)$/i.test(mimeType)) {
+    const error = new Error('image_base64 must be a supported image MIME type.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(base64) || base64.length % 4 !== 0) {
+    const error = new Error('image_base64 must be valid Base64 image data.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const byteLength = Buffer.byteLength(base64, 'base64');
+  if (byteLength === 0) {
+    const error = new Error('image_base64 decoded to an empty image.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return { base64, mimeType, byteLength };
+};
+
+const parseActionBlockAt = (text, markerIndex) => {
+  const jsonStart = text.indexOf('{', markerIndex);
+  if (jsonStart === -1) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = jsonStart; index < text.length; index += 1) {
+    const char = text[index];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+    } else if (char === '{') {
+      depth += 1;
+    } else if (char === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        return {
+          action: JSON.parse(text.slice(jsonStart, index + 1)),
+          start: markerIndex,
+          end: index + 1,
+        };
+      }
+    }
+  }
+
+  return null;
+};
+
+export const extractActionDirectives = (text) => {
+  const responseText = String(text || '');
+  const actions = [];
+  const ranges = [];
+  const markerPattern = /ACTION:\s*/gi;
+  let match;
+
+  while ((match = markerPattern.exec(responseText)) !== null) {
+    const parsed = parseActionBlockAt(responseText, match.index);
+    if (!parsed) continue;
+    actions.push(parsed.action);
+    ranges.push([parsed.start, parsed.end]);
+    markerPattern.lastIndex = parsed.end;
+  }
+
+  let response = '';
+  let cursor = 0;
+  for (const [start, end] of ranges) {
+    response += responseText.slice(cursor, start);
+    cursor = end;
+  }
+  response += responseText.slice(cursor);
+
+  return {
+    response: response.replace(/^\s*ACTION:\s*$/gim, '').trim(),
+    actions,
+  };
+};
+
+const normalizeVisionDate = (value) => {
+  if (value == null || value === '') return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    const error = new Error('ACTION due_date must be a valid date.');
+    error.statusCode = 400;
+    throw error;
+  }
+  return parsed.toISOString().slice(0, 10);
+};
+
+const normalizeVisionTaskType = (value) => {
+  const normalized = String(value ?? 'general').trim().toLowerCase();
+  if (normalized === 'exam' || normalized === 'assignment') return normalized;
+  return 'general';
+};
+
+const normalizeEstimatedMinutes = (value) => {
+  const parsed = Number.parseInt(String(value ?? ''), 10);
+  if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  return 30;
+};
+
+const normalizeVisionTitle = (value, fallback) => {
+  const title = String(value || '').trim();
+  if (title) return title.slice(0, 255);
+  if (fallback) return fallback;
+  const error = new Error('ACTION data requires a title.');
+  error.statusCode = 400;
+  throw error;
+};
+
+const createPrimaryTaskForVision = async ({ db, userId, data, subTaskCount }) => {
+  const insertPayload = {
+    user_id: userId,
+    title: normalizeVisionTitle(data?.title),
+    description:
+      data?.description == null || String(data.description).trim() === ''
+        ? null
+        : String(data.description).trim(),
+    status: 'pending',
+    due_date: normalizeVisionDate(data?.due_date ?? data?.dueDate),
+    task_type: normalizeVisionTaskType(data?.task_type ?? data?.taskType),
+  };
+
+  if (Number.isFinite(subTaskCount) && subTaskCount > 0) {
+    insertPayload.total_subtasks = subTaskCount;
+  }
+
+  let result = await db
+    .from('primary_tasks')
+    .insert(insertPayload)
+    .select('*')
+    .single();
+
+  if (result.error) {
+    const { description, status, due_date, task_type, ...legacyPayload } = insertPayload;
+    result = await db
+      .from('primary_tasks')
+      .insert(legacyPayload)
+      .select('*')
+      .single();
+  }
+
+  if (result.error && insertPayload.total_subtasks !== undefined) {
+    result = await db
+      .from('primary_tasks')
+      .insert({
+        user_id: insertPayload.user_id,
+        title: insertPayload.title,
+      })
+      .select('*')
+      .single();
+  }
+
+  if (result.error) throw result.error;
+  return result.data;
+};
+
+const createSubTasksForVision = async ({ db, primaryTaskId, userId, items }) => {
+  if (!items.length) return [];
+
+  const insertPayload = items.map((item) => ({
+    primary_task_id: primaryTaskId,
+    user_id: userId,
+    title: normalizeVisionTitle(item?.title, 'Untitled academic task'),
+    due_date: normalizeVisionDate(item?.due_date ?? item?.dueDate),
+  }));
+
+  const { data, error } = await db
+    .from('sub_tasks')
+    .insert(insertPayload)
+    .select('*');
+
+  if (error) throw error;
+  return data || [];
+};
+
+const getVisionSubTasks = (action) => {
+  const data = action?.data || {};
+  const taskItems =
+    data.sub_tasks ||
+    data.subTasks ||
+    data.milestones ||
+    data.tasks ||
+    data.items;
+
+  if (Array.isArray(taskItems) && taskItems.length > 0) {
+    return taskItems.slice(0, 5);
+  }
+
+  return [
+    {
+      title: data.title,
+      due_date: data.due_date ?? data.dueDate,
+      estimated_minutes: data.estimated_minutes ?? data.estimatedMinutes,
+      priority: data.priority,
+    },
+  ];
+};
+
+export const executeVisionActions = async ({ actions, db, userId }) => {
+  const created = [];
+
+  for (const action of actions) {
+    if (!action || !['CREATE_TASK', 'CREATE_PRIMARY_TASK'].includes(action.type)) {
+      continue;
+    }
+
+    const subTaskItems = getVisionSubTasks(action).map((item, index) => ({
+      ...item,
+      title:
+        item?.title ||
+        (action.type === 'CREATE_TASK'
+          ? action.data?.title
+          : `Milestone ${index + 1}`),
+    }));
+
+    const primaryTask = await createPrimaryTaskForVision({
+      db,
+      userId,
+      data: action.data,
+      subTaskCount: subTaskItems.length,
+    });
+    const subTasks = await createSubTasksForVision({
+      db,
+      primaryTaskId: primaryTask.id,
+      userId,
+      items: subTaskItems,
+    });
+
+    created.push({
+      actionType: action.type,
+      primaryTask,
+      subTasks,
+    });
+  }
+
+  return created;
+};
+
+const generateVisionActionText = async ({ imageBase64, mimeType }) => {
+  const ai = getGeminiClient();
+  const model = process.env.GEMINI_VISION_MODEL || 'gemini-3-flash-preview';
+  const response = await ai.models.generateContent({
+    model,
+    contents: [
+      createPartFromText(VISION_PARSE_PROMPT),
+      createPartFromBase64(imageBase64, mimeType),
+    ],
+    config: {
+      temperature: 0.2,
+      maxOutputTokens: 2048,
+    },
+  });
+
+  return response.text || '';
+};
+
+export const createVisionParseResponse = async ({
+  imageBase64,
+  mimeType,
+  db,
+  userId,
+  generateText = generateVisionActionText,
+}) => {
+  const aiText = await generateText({ imageBase64, mimeType });
+  const { actions } = extractActionDirectives(aiText);
+
+  if (actions.length === 0) {
+    return {
+      message: 'No academic tasks or deadlines were found in the image.',
+      actionsParsed: 0,
+      created: [],
+    };
+  }
+
+  const created = await executeVisionActions({ actions, db, userId });
+
+  return {
+    message: `Created ${created.length} academic task group${created.length === 1 ? '' : 's'} from the image.`,
+    actionsParsed: actions.length,
+    created,
+  };
 };
 
 export const buildChatFallbackResponse = (message, tasks, now = new Date()) => {
@@ -167,11 +665,19 @@ export const createAiChatResponse = async ({
   const systemInstruction = buildChatSystemPrompt(tasks, now);
   const prompt = `User message: ${trimmedMessage}`;
   const responseText = await generateText({ systemInstruction, prompt });
+  const extracted = extractActionDirective(
+    String(responseText || '').trim() ||
+      buildChatFallbackResponse(trimmedMessage, tasks, now),
+  );
+  const actionTitle = String(extracted.action?.data?.title || '').trim();
 
   return {
     response:
-      String(responseText || '').trim() ||
-      buildChatFallbackResponse(trimmedMessage, tasks, now),
+      extracted.response ||
+      (actionTitle
+        ? `Done! I've added "${actionTitle}" to your list.`
+        : buildChatFallbackResponse(trimmedMessage, tasks, now)),
+    action: extracted.action,
     taskCount: (tasks || []).length,
   };
 };
@@ -263,6 +769,7 @@ export const chatWithAi = async (req, res) => {
     if (error) throw error;
 
     let payload;
+    let actionTask = null;
     try {
       payload = await createAiChatResponse({ message, tasks: tasks || [] });
     } catch (aiError) {
@@ -274,13 +781,62 @@ export const chatWithAi = async (req, res) => {
       };
     }
 
-    res.status(200).json(payload);
+    actionTask = await createTaskFromAiAction({
+      action: payload.action,
+      db,
+      userId,
+    });
+
+    const { action, ...clientPayload } = payload;
+    res.status(200).json({
+      ...clientPayload,
+      actionPerformed: Boolean(actionTask),
+      actionType: actionTask ? 'CREATE_TASK' : null,
+      task: actionTask,
+    });
   } catch (error) {
     const statusCode = Number.isInteger(error?.statusCode) ? error.statusCode : 500;
     console.error('AI Chat Failed:', error.message || error, 'Payload received:', req.body);
     res.status(statusCode).json({
       error: statusCode === 400 ? error.message : 'Failed to chat with AI.',
       details: error.message || 'Unknown AI chat error.',
+    });
+  }
+};
+
+export const visionParse = async (req, res) => {
+  try {
+    const db = serviceSupabase;
+    if (!db) {
+      return res.status(500).json({
+        error: 'Admin Supabase client is missing.',
+        details: 'Service-role Supabase client was not initialized.',
+      });
+    }
+
+    const userId = req.user.id;
+    const image = normalizeImagePayload(
+      req.body?.image_base64,
+      req.body?.image_mime_type ?? req.body?.mime_type,
+    );
+
+    const payload = await createVisionParseResponse({
+      imageBase64: image.base64,
+      mimeType: image.mimeType,
+      db,
+      userId,
+    });
+
+    res.status(200).json({
+      ...payload,
+      imageBytes: image.byteLength,
+    });
+  } catch (error) {
+    const statusCode = Number.isInteger(error?.statusCode) ? error.statusCode : 500;
+    console.error('Vision parse failed:', error);
+    res.status(statusCode).json({
+      error: statusCode === 400 ? error.message : 'Failed to parse image.',
+      details: error.message || 'Unknown vision parse error.',
     });
   }
 };

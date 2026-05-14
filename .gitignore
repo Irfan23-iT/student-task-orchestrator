@@ -25,6 +25,7 @@ expo-env.d.ts
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+*.log
 
 # macOS
 .DS_Store
@@ -38,6 +39,11 @@ yarn-error.*
 .mobile-bootstrap/
 .omx/
 student-task-orchestrator/
+
+# mobile debug artifacts
+rakanstudent_mobile/*.png
+rakanstudent_mobile/*.xml
+rakanstudent_mobile/last_test_email.txt
 
 # typescript
 *.tsbuildinfo

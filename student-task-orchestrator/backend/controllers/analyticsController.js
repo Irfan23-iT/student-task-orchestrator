@@ -152,18 +152,103 @@ const ensureReminderChannelReady = async ({ userId, channel, notificationPrefere
   }
 };
 
-const assertOwnedSubTask = async (userId, subTaskId) => {
-  assert(Boolean(String(subTaskId || '').trim()), 'Reminder subTaskId is required.');
+const REMINDER_TASK_TABLES = [
+  { type: 'task', table: 'tasks' },
+  { type: 'primary_task', table: 'primary_tasks' },
+  { type: 'sub_task', table: 'sub_tasks' }
+];
+
+const normalizeReminderTaskType = (taskType = '') => {
+  const normalized = `${taskType || ''}`.trim().toLowerCase();
+  if (['task', 'tasks', 'standard', 'standard_task'].includes(normalized)) return 'task';
+  if (['primary', 'primary_task', 'primary_tasks'].includes(normalized)) return 'primary_task';
+  if (['sub', 'subtask', 'sub_task', 'sub_tasks'].includes(normalized)) return 'sub_task';
+  return '';
+};
+
+const getReminderTaskCandidates = (taskType = '') => {
+  const normalizedType = normalizeReminderTaskType(taskType);
+  if (!normalizedType) return REMINDER_TASK_TABLES;
+
+  return [
+    REMINDER_TASK_TABLES.find((candidate) => candidate.type === normalizedType),
+    ...REMINDER_TASK_TABLES.filter((candidate) => candidate.type !== normalizedType)
+  ].filter(Boolean);
+};
+
+const readOwnedSubTask = async (userId, taskId) => {
+  const { data: directSubTask, error: directError } = await supabase
+    .from('sub_tasks')
+    .select('id, user_id, primary_task_id')
+    .eq('id', taskId)
+    .maybeSingle();
+
+  if (directError) throw directError;
+  if (!directSubTask?.id) return null;
+  if (directSubTask.user_id === userId) {
+    return {
+      id: directSubTask.id,
+      table: 'sub_tasks',
+      type: 'sub_task'
+    };
+  }
+
+  if (!directSubTask.primary_task_id) return null;
+
+  const { data: parentTask, error: parentError } = await supabase
+    .from('primary_tasks')
+    .select('id')
+    .eq('id', directSubTask.primary_task_id)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (parentError) throw parentError;
+  if (!parentTask?.id) return null;
+
+  return {
+    id: directSubTask.id,
+    table: 'sub_tasks',
+    type: 'sub_task'
+  };
+};
+
+const readOwnedTask = async ({ userId, taskId, table, type }) => {
+  if (table === 'sub_tasks') {
+    return readOwnedSubTask(userId, taskId);
+  }
 
   const { data, error } = await supabase
-    .from('sub_tasks')
+    .from(table)
     .select('id')
-    .eq('id', subTaskId)
+    .eq('id', taskId)
     .eq('user_id', userId)
     .maybeSingle();
 
   if (error) throw error;
-  assert(Boolean(data?.id), 'Subtask not found.', 404);
+  if (!data?.id) return null;
+
+  return {
+    id: data.id,
+    table,
+    type
+  };
+};
+
+const assertOwnedReminderTask = async ({ userId, taskId, taskType }) => {
+  assert(Boolean(String(taskId || '').trim()), 'Reminder taskId is required.');
+
+  for (const candidate of getReminderTaskCandidates(taskType)) {
+    const task = await readOwnedTask({
+      userId,
+      taskId,
+      table: candidate.table,
+      type: candidate.type
+    });
+
+    if (task) return task;
+  }
+
+  assert(false, 'Task not found.', 404);
 };
 
 export const getAnalyticsOverview = async (req, res) => {
@@ -344,7 +429,11 @@ export const createReminder = async (req, res) => {
     assert(payload.reminderAt.length > 0, 'Reminder time is required.');
     assert(['inbox', 'email', 'push'].includes(payload.channel), 'Reminder channel is invalid.');
     assert(Number.isFinite(Date.parse(payload.reminderAt)), 'Reminder time is invalid.');
-    await assertOwnedSubTask(userId, payload.subTaskId);
+    const reminderTask = await assertOwnedReminderTask({
+      userId,
+      taskId: payload.taskId,
+      taskType: payload.taskType
+    });
     await ensureReminderChannelReady({
       userId,
       channel: payload.channel,
@@ -353,11 +442,16 @@ export const createReminder = async (req, res) => {
 
     const reminderRow = {
       user_id: userId,
-      sub_task_id: payload.subTaskId,
+      sub_task_id: reminderTask.type === 'sub_task' ? reminderTask.id : null,
       title: payload.title,
       reminder_at: new Date(payload.reminderAt).toISOString(),
       channel: payload.channel,
-      status: 'scheduled'
+      status: 'scheduled',
+      payload: {
+        task_id: reminderTask.id,
+        task_table: reminderTask.table,
+        task_type: reminderTask.type
+      }
     };
 
     const { data, error } = await supabase
