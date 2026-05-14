@@ -24,7 +24,7 @@ class HomeScreen extends ConsumerWidget {
     final email = session.user.email ?? 'student';
 
     return Scaffold(
-      backgroundColor: AppTheme.scaffoldBackground,
+      backgroundColor: const Color(0xFF121014),
       appBar: AppBar(
         title: const Text('RakanStudent'),
         backgroundColor: Colors.transparent,

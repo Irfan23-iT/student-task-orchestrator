@@ -212,7 +212,7 @@ class _MainScreenState extends State<MainScreen> {
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Color(0xFFE8E0FF), Color(0xFFF8F9FA)],
+          colors: [Color(0xFF241033), Color(0xFF121014), Color(0xFF08070A)],
         ),
       ),
       child: Scaffold(

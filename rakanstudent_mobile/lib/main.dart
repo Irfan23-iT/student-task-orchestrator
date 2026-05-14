@@ -3,7 +3,9 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'core/app_theme.dart';
 import 'core/config/env_config.dart';
+import 'core/theme_provider.dart';
 import 'features/auth/login_screen.dart';
 import 'features/home/main_screen.dart';
 import 'services/api_service.dart';
@@ -21,27 +23,20 @@ Future<void> main() async {
   runApp(const ProviderScope(child: _StudentTaskOrchestratorApp()));
 }
 
-class _StudentTaskOrchestratorApp extends StatelessWidget {
+class _StudentTaskOrchestratorApp extends ConsumerWidget {
   const _StudentTaskOrchestratorApp();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final themeMode = ref.watch(themeModeProvider);
+
     return MaterialApp(
       title: 'RakanStudent Mobile',
       debugShowCheckedModeBanner: false,
       routes: {'/login': (_) => const LoginScreen()},
-      theme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: Colors.deepPurple,
-        brightness: Brightness.light,
-        cardTheme: CardThemeData(
-          elevation: 2,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-        ),
-        appBarTheme: const AppBarTheme(centerTitle: true, elevation: 0),
-      ),
+      themeMode: themeMode,
+      theme: RakanAppTheme.lightTheme,
+      darkTheme: RakanAppTheme.darkTheme,
       home: const _StartupGate(),
     );
   }

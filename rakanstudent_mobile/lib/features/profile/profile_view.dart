@@ -1,20 +1,22 @@
 // ignore_for_file: avoid_print
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/theme_provider.dart';
 import '../../models/settings_model.dart';
 import '../../services/api_service.dart';
 
-class ProfileView extends StatefulWidget {
+class ProfileView extends ConsumerStatefulWidget {
   const ProfileView({super.key});
 
   @override
-  State<ProfileView> createState() => _ProfileViewState();
+  ConsumerState<ProfileView> createState() => _ProfileViewState();
 }
 
-class _ProfileViewState extends State<ProfileView> {
+class _ProfileViewState extends ConsumerState<ProfileView> {
   final ApiService _apiService = ApiService();
   final _wakeTimeController = TextEditingController();
   final _sleepTimeController = TextEditingController();
@@ -481,6 +483,8 @@ class _ProfileViewState extends State<ProfileView> {
 
   @override
   Widget build(BuildContext context) {
+    final themeMode = ref.watch(themeModeProvider);
+    final isDarkMode = themeMode == ThemeMode.dark;
     final user = _currentUser();
     final email = user?.email ?? 'local tester';
     final displayName = _displayName ?? _resolveDisplayName(user);
@@ -736,6 +740,50 @@ class _ProfileViewState extends State<ProfileView> {
                     ],
                   ),
                 ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              decoration: BoxDecoration(
+                color: Theme.of(context).cardColor,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.08),
+                    blurRadius: 18,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: SwitchListTile(
+                value: isDarkMode,
+                onChanged:
+                    (_) => ref.read(themeModeProvider.notifier).toggleTheme(),
+                secondary: Icon(
+                  isDarkMode
+                      ? Icons.dark_mode_rounded
+                      : Icons.light_mode_rounded,
+                  color:
+                      isDarkMode
+                          ? const Color(0xFFFFC857)
+                          : const Color(0xFF7C3AED),
+                ),
+                title: Text(
+                  isDarkMode ? 'Dark Mode' : 'Light Mode',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                subtitle: Text(
+                  isDarkMode
+                      ? 'Midnight neon interface'
+                      : 'Bright study interface',
+                  style: theme.textTheme.bodyMedium,
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 6,
+                ),
               ),
             ),
             const SizedBox(height: 20),
