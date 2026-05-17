@@ -508,7 +508,9 @@ const visionTaskPayload = ({ userId, actionData, item }) => ({
 const dedupeVisionTasksByTitleAndDueDate = (tasks) => {
   const seen = new Set();
   return tasks.filter((task) => {
-    const key = `${task.title}\u0000${task.due_date ?? ''}`;
+    const datePart = task.due_date ? task.due_date.toString().slice(0, 10) : '';
+    const normalizedTitle = task.title.toLowerCase().trim();
+    const key = `${normalizedTitle}\u0000${datePart}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
