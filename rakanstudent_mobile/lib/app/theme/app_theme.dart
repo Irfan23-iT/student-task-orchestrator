@@ -1,24 +1,13 @@
 import 'package:flutter/material.dart';
 
-class AppTheme {
-  static const scaffoldBackground = Color(0xFFF5F5F7);
-  static const primary = Color(0xFF2F628F);
-  static const error = Color(0xFFFF3B30);
+import '../../core/app_theme.dart' as core_theme;
 
-  static ThemeData light() {
-    return ThemeData(
-      scaffoldBackgroundColor: scaffoldBackground,
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: primary,
-        primary: primary,
-        error: error,
-      ),
-      inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: Colors.white,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-      ),
-      useMaterial3: true,
-    );
-  }
+class AppTheme {
+  static const scaffoldBackground = Color(0xFFF5F7FF);
+  static const primary = Color(0xFF2B3D8A);
+  static const error = Color(0xFFBA1A1A);
+
+  static ThemeData light() => core_theme.RakanAppTheme.lightTheme;
+
+  static ThemeData dark() => core_theme.RakanAppTheme.darkTheme;
 }

@@ -17,22 +17,22 @@ class DashboardView extends StatefulWidget {
   State<DashboardView> createState() => _DashboardViewState();
 }
 
-class _DashboardViewState extends State<DashboardView> {
+class _DashboardViewState extends State<DashboardView>
+    with WidgetsBindingObserver {
   static const List<int> _focusDurationOptions = [15, 25, 50];
   static const int _defaultFocusDurationMinutes = 25;
 
   final ApiService _apiService = ApiService();
 
-  List<ReminderJobModel> _activeReminders = const [];
-  int _pendingTasksCount = 0;
-  String _nextClassName = 'No classes today';
-  String _nextClassSubtitle = 'Next Class';
   int _currentStreak = 0;
   Timer? _timer;
   int _focusDurationMinutes = _defaultFocusDurationMinutes;
   int _secondsRemaining = _defaultFocusDurationMinutes * 60;
   bool _isFocusCardPressed = false;
   bool _isSprintCardPressed = false;
+  bool _wasFocusTimerRunningInBackground = false;
+  DateTime? _backgroundedAt;
+  Future<DashboardSummaryDto>? _dashboardFuture;
   final Set<int> _pressedOverviewCards = <int>{};
 
   bool get _isFocusTimerActive => _timer?.isActive ?? false;
@@ -40,22 +40,67 @@ class _DashboardViewState extends State<DashboardView> {
   @override
   void initState() {
     super.initState();
-    _loadAnalyticsOverview();
+    WidgetsBinding.instance.addObserver(this);
+    _dashboardFuture = _loadDashboardSummary();
+    unawaited(_loadAnalyticsOverview());
+    unawaited(_loadFocusPreferences());
     ApiService.taskMutationNotifier.addListener(_handleTaskMutation);
-    _loadDashboardData();
-    _loadFocusPreferences();
     _runApiBridgeHealthTest();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
     ApiService.taskMutationNotifier.removeListener(_handleTaskMutation);
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden) {
+      if (_isFocusTimerActive) {
+        _backgroundedAt = DateTime.now();
+        _wasFocusTimerRunningInBackground = true;
+        _timer?.cancel();
+        _timer = null;
+      }
+      return;
+    }
+
+    if (state != AppLifecycleState.resumed ||
+        !_wasFocusTimerRunningInBackground) {
+      return;
+    }
+
+    final backgroundedAt = _backgroundedAt;
+    _backgroundedAt = null;
+    _wasFocusTimerRunningInBackground = false;
+    if (backgroundedAt == null) {
+      _startFocusTimer();
+      return;
+    }
+
+    final elapsedSeconds = DateTime.now().difference(backgroundedAt).inSeconds;
+    final adjustedRemaining = _secondsRemaining - elapsedSeconds;
+    if (adjustedRemaining <= 0) {
+      setState(() {
+        _secondsRemaining = 0;
+      });
+      _completeFocusSession();
+      return;
+    }
+
+    setState(() {
+      _secondsRemaining = adjustedRemaining;
+    });
+    _startFocusTimer();
+  }
+
   Future<void> _handleTaskMutation() async {
-    await _refreshDashboard();
+    await _reloadDashboard();
   }
 
   Future<void> _runApiBridgeHealthTest() async {
@@ -81,22 +126,8 @@ class _DashboardViewState extends State<DashboardView> {
     try {
       final analytics = await _apiService.fetchAnalyticsOverview();
 
-      if (mounted) {
-        setState(() {
-          _activeReminders = List<ReminderJobModel>.from(
-            analytics.reminderJobs,
-          );
-        });
-      }
-
       return analytics;
     } catch (error) {
-      if (mounted) {
-        setState(() {
-          _activeReminders = const [];
-        });
-      }
-
       return const AnalyticsModel(
         streakSnapshot: {'currentStreak': 0},
         reminderJobs: <ReminderJobModel>[],
@@ -113,12 +144,21 @@ class _DashboardViewState extends State<DashboardView> {
     }
   }
 
-  Future<void> _refreshDashboard() async {
-    await Future.wait<void>([
-      _loadAnalyticsOverview(),
-      _loadDashboardData(),
-      _loadFocusPreferences(),
-    ]);
+  Future<void> _reloadDashboard() {
+    final future = _loadDashboardSummary();
+
+    if (mounted) {
+      setState(() {
+        _dashboardFuture = future;
+      });
+    } else {
+      _dashboardFuture = future;
+    }
+
+    unawaited(_loadAnalyticsOverview());
+    unawaited(_loadFocusPreferences());
+
+    return future.then<void>((_) {});
   }
 
   int _parseFocusDurationMinutes(Object? value) {
@@ -150,21 +190,15 @@ class _DashboardViewState extends State<DashboardView> {
   Future<void> _loadFocusPreferences() async {
     try {
       final supabase = Supabase.instance.client;
-      final userId = supabase.auth.currentUser?.id;
-      if (userId == null || userId.isEmpty) {
+      final metadata = supabase.auth.currentUser?.userMetadata;
+      if (metadata == null) {
         return;
       }
 
-      final response =
-          await supabase
-              .from('user_preferences')
-              .select('focus_duration_minutes, focus_streak')
-              .eq('user_id', userId)
-              .maybeSingle();
       final durationMinutes = _parseFocusDurationMinutes(
-        response?['focus_duration_minutes'],
+        metadata['focus_duration_minutes'],
       );
-      final focusStreak = _parseFocusStreak(response?['focus_streak']);
+      final focusStreak = _parseFocusStreak(metadata['focus_streak']);
 
       if (!mounted) {
         return;
@@ -192,6 +226,8 @@ class _DashboardViewState extends State<DashboardView> {
   void _cycleFocusDuration() {
     _timer?.cancel();
     _timer = null;
+    _backgroundedAt = null;
+    _wasFocusTimerRunningInBackground = false;
 
     final currentIndex = _focusDurationOptions.indexOf(_focusDurationMinutes);
     final nextIndex =
@@ -223,6 +259,8 @@ class _DashboardViewState extends State<DashboardView> {
     }
 
     _timer?.cancel();
+    _backgroundedAt = null;
+    _wasFocusTimerRunningInBackground = false;
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) {
         timer.cancel();
@@ -250,6 +288,8 @@ class _DashboardViewState extends State<DashboardView> {
   void _pauseFocusTimer() {
     _timer?.cancel();
     _timer = null;
+    _backgroundedAt = null;
+    _wasFocusTimerRunningInBackground = false;
 
     if (!mounted) {
       return;
@@ -259,7 +299,11 @@ class _DashboardViewState extends State<DashboardView> {
   }
 
   void _completeFocusSession() {
-    unawaited(_incrementFocusStreak());
+    _timer?.cancel();
+    _timer = null;
+    _backgroundedAt = null;
+    _wasFocusTimerRunningInBackground = false;
+    unawaited(_logFocusSessionCompletion());
     HapticFeedback.vibrate();
 
     if (!mounted) {
@@ -284,313 +328,39 @@ class _DashboardViewState extends State<DashboardView> {
     );
   }
 
-  Future<void> _incrementFocusStreak() async {
+  Future<void> _logFocusSessionCompletion() async {
     try {
-      final supabase = Supabase.instance.client;
-      final userId = supabase.auth.currentUser?.id;
-      if (userId == null || userId.isEmpty) {
-        return;
-      }
-
-      final response =
-          await supabase
-              .from('user_preferences')
-              .select('focus_streak')
-              .eq('user_id', userId)
-              .maybeSingle();
-      final nextStreak = _parseFocusStreak(response?['focus_streak']) + 1;
-
-      if (response == null) {
-        await supabase.from('user_preferences').upsert({
-          'user_id': userId,
-          'wake_time': '07:00',
-          'sleep_time': '23:00',
-          'focus_duration_minutes': _focusDurationMinutes,
-          'focus_streak': nextStreak,
-        }, onConflict: 'user_id');
-      } else {
-        await supabase
-            .from('user_preferences')
-            .update({'focus_streak': nextStreak})
-            .eq('user_id', userId);
-      }
+      final result = await _apiService.completeFocusSession(
+        durationMinutes: _focusDurationMinutes,
+      );
 
       if (!mounted) {
         return;
       }
 
       setState(() {
-        _currentStreak = nextStreak;
+        _currentStreak = result.streakCount;
       });
     } catch (error, stackTrace) {
-      print('Focus streak increment failed: $error');
+      print('Focus session logging failed: $error');
       print(stackTrace);
     }
   }
 
-  String _todayDayCode() {
-    // Add Subject saves day_of_week as MON/TUE/WED/THU/FRI/SAT/SUN.
-    const dayCodes = <int, String>{
-      DateTime.monday: 'MON',
-      DateTime.tuesday: 'TUE',
-      DateTime.wednesday: 'WED',
-      DateTime.thursday: 'THU',
-      DateTime.friday: 'FRI',
-      DateTime.saturday: 'SAT',
-      DateTime.sunday: 'SUN',
-    };
+  Future<DashboardSummaryDto> _loadDashboardSummary() async {
+    final summary = await _apiService.fetchDashboardSummary();
 
-    final dayCode = dayCodes[DateTime.now().weekday] ?? 'MON';
-    print('DEBUG: Today weekday ${DateTime.now().weekday} maps to $dayCode');
-    return dayCode;
-  }
-
-  bool _isPendingStatus(Object? value) {
-    final normalized = (value ?? 'pending')
-        .toString()
-        .trim()
-        .toLowerCase()
-        .replaceAll(' ', '_');
-    const resolvedStatuses = <String>{
-      'complete',
-      'completed',
-      'done',
-      'archived',
-      'cancelled',
-      'canceled',
-    };
-
-    return !resolvedStatuses.contains(normalized);
-  }
-
-  bool _isTruthy(Object? value) {
-    if (value is bool) {
-      return value;
-    }
-
-    if (value is num) {
-      return value != 0;
-    }
-
-    final normalized = value?.toString().trim().toLowerCase();
-    return normalized == 'true' || normalized == '1' || normalized == 'yes';
-  }
-
-  bool _isPendingTaskRow(Map<String, dynamic> row) {
-    final isCompleted = row['is_completed'] ?? row['isCompleted'];
-    if (_isTruthy(isCompleted)) {
-      return false;
-    }
-
-    return _isPendingStatus(row['status']);
-  }
-
-  bool _isTodayClassRow(Map<String, dynamic> row, String todayDayCode) {
-    final rawDay = row['day_of_week'] ?? row['dayOfWeek'];
-    if (rawDay is num) {
-      final dayOfWeek = rawDay.toInt() == 0 ? DateTime.sunday : rawDay.toInt();
-      return dayOfWeek == DateTime.now().weekday;
-    }
-
-    final normalized = '${rawDay ?? ''}'.trim().toUpperCase();
-    final numericDay = int.tryParse(normalized);
-    if (numericDay != null) {
-      final dayOfWeek = numericDay == 0 ? DateTime.sunday : numericDay;
-      return dayOfWeek == DateTime.now().weekday;
-    }
-
-    return normalized == todayDayCode;
-  }
-
-  String _stringFromRow(Map<String, dynamic> row, List<String> keys) {
-    for (final key in keys) {
-      final value = row[key]?.toString().trim();
-      if (value != null && value.isNotEmpty) {
-        return value;
-      }
-    }
-
-    return '';
-  }
-
-  int _minutesFromTime(Object? value) {
-    final rawValue = value?.toString().trim() ?? '';
-    final timeParts = rawValue.split(':');
-    final hour = int.tryParse(timeParts.isNotEmpty ? timeParts[0] : '');
-    final minute = int.tryParse(timeParts.length > 1 ? timeParts[1] : '');
-    if (hour == null || minute == null) {
-      return 24 * 60;
-    }
-
-    return hour * 60 + minute;
-  }
-
-  String _formatTimeLabel(Object? value) {
-    final rawValue = value?.toString().trim() ?? '';
-    if (rawValue.isEmpty) {
-      return '';
-    }
-
-    final timeParts = rawValue.split(':');
-    if (timeParts.length < 2) {
-      return rawValue;
-    }
-
-    return '${timeParts[0].padLeft(2, '0')}:${timeParts[1].padLeft(2, '0')}';
-  }
-
-  Map<String, dynamic>? _nextClassFromRows(List<Map<String, dynamic>> rows) {
-    if (rows.isEmpty) {
-      return null;
-    }
-
-    final sortedRows = List<Map<String, dynamic>>.from(rows)..sort((
-      left,
-      right,
-    ) {
-      return _minutesFromTime(
-        left['start_time'] ?? left['startTime'],
-      ).compareTo(_minutesFromTime(right['start_time'] ?? right['startTime']));
-    });
-    final now = DateTime.now();
-    final currentMinutes = now.hour * 60 + now.minute;
-
-    for (final row in sortedRows) {
-      final startMinutes = _minutesFromTime(
-        row['start_time'] ?? row['startTime'],
-      );
-      final endMinutes = _minutesFromTime(row['end_time'] ?? row['endTime']);
-      if (currentMinutes <= startMinutes ||
-          (currentMinutes >= startMinutes && currentMinutes < endMinutes)) {
-        return row;
-      }
-    }
-
-    return sortedRows.last;
-  }
-
-  ({String name, String subtitle}) _nextClassDisplay(
-    List<Map<String, dynamic>> todayClassRows,
-  ) {
-    final nextClass = _nextClassFromRows(todayClassRows);
-    if (nextClass == null) {
-      return (name: 'No classes today', subtitle: 'Next Class');
-    }
-
-    final className = _stringFromRow(nextClass, const [
-      'class_name',
-      'className',
-      'course_name',
-      'courseName',
-      'title',
-    ]);
-    final startTime = _formatTimeLabel(
-      nextClass['start_time'] ?? nextClass['startTime'],
+    print(
+      'DEBUG: Dashboard summary fetched '
+      '${summary.upcomingBlocks.length} upcoming blocks',
     );
-    final endTime = _formatTimeLabel(
-      nextClass['end_time'] ?? nextClass['endTime'],
-    );
-    final subtitle =
-        startTime.isEmpty
-            ? 'Next Class'
-            : endTime.isEmpty
-            ? 'Starts $startTime'
-            : '$startTime - $endTime';
-
-    return (
-      name: className.isEmpty ? 'Untitled class' : className,
-      subtitle: subtitle,
-    );
-  }
-
-  List<Map<String, dynamic>> _rowsFromResponse(Object response) {
-    return (response as List)
-        .whereType<Map>()
-        .map((row) => Map<String, dynamic>.from(row))
-        .toList(growable: false);
-  }
-
-  Future<void> _loadDashboardData() async {
-    int taskCount;
-    int classCount;
-    ({String name, String subtitle}) nextClassDisplay;
-
-    try {
-      final dayCode = _todayDayCode();
-      final responses = await Future.wait<dynamic>([
-        Supabase.instance.client.from('tasks').select(),
-        Supabase.instance.client.from('primary_tasks').select(),
-        Supabase.instance.client.from('sub_tasks').select(),
-        Supabase.instance.client.from('fixed_classes').select(),
-      ]);
-
-      final taskRows = _rowsFromResponse(responses[0]);
-      final primaryTaskRows = _rowsFromResponse(responses[1]);
-      final subTaskRows = _rowsFromResponse(responses[2]);
-      final classRows = _rowsFromResponse(responses[3]);
-      final todayClassRows =
-          classRows.where((row) => _isTodayClassRow(row, dayCode)).toList();
-      taskCount =
-          taskRows.where(_isPendingTaskRow).length +
-          primaryTaskRows.where(_isPendingTaskRow).length +
-          subTaskRows.where(_isPendingTaskRow).length;
-      classCount = todayClassRows.length;
-      nextClassDisplay = _nextClassDisplay(todayClassRows);
-
-      print('Fetched Tasks: $taskCount');
-      print('Fetched Classes: $classCount');
-      print('Fetched Next Class: ${nextClassDisplay.name}');
-      print(
-        'DEBUG: Dashboard fetched ${taskRows.length} manual tasks, '
-        '${primaryTaskRows.length} primary tasks, '
-        '${subTaskRows.length} subtasks, ${classRows.length} classes',
-      );
-    } on AssertionError catch (e, stackTrace) {
-      print('Dashboard Supabase fetch failed: $e');
-      print(stackTrace);
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _pendingTasksCount = 0;
-        _nextClassName = 'No classes today';
-        _nextClassSubtitle = 'Next Class';
-      });
-
-      await _runDashboardPolishTest(pendingTasksCount: 0, classesTodayCount: 0);
-      return;
-    } catch (e, stackTrace) {
-      print('Dashboard Supabase fetch failed: $e');
-      print(stackTrace);
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _pendingTasksCount = 0;
-        _nextClassName = 'No classes today';
-        _nextClassSubtitle = 'Next Class';
-      });
-
-      await _runDashboardPolishTest(pendingTasksCount: 0, classesTodayCount: 0);
-      return;
-    }
-
-    if (!mounted) {
-      return;
-    }
-
-    setState(() {
-      _pendingTasksCount = taskCount;
-      _nextClassName = nextClassDisplay.name;
-      _nextClassSubtitle = nextClassDisplay.subtitle;
-    });
 
     await _runDashboardPolishTest(
-      pendingTasksCount: taskCount,
-      classesTodayCount: classCount,
+      pendingTasksCount: summary.pendingTasksCount,
+      classesTodayCount: summary.upcomingBlocks.length,
     );
+
+    return summary;
   }
 
   Future<void> _signOut(BuildContext context) async {
@@ -647,20 +417,38 @@ class _DashboardViewState extends State<DashboardView> {
     return '${local.day}/${local.month}/${local.year} $hour:$minutes $suffix';
   }
 
-  Future<bool> _dismissReminder(ReminderJobModel reminder) async {
-    try {
-      await _apiService.dismissReminder(reminder.id);
-      return true;
-    } catch (error) {
-      if (!mounted) {
-        return false;
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to dismiss reminder: $error')),
-      );
-      return false;
+  String _formatBlockTimestamp(DateTime? value) {
+    if (value == null) {
+      return 'Unscheduled';
     }
+
+    return _formatReminderTimestamp(value);
+  }
+
+  String _formatBlockTimeRange(DashboardUpcomingBlockDto block) {
+    final start = block.startsAt?.toLocal();
+    final end = block.endsAt?.toLocal();
+    if (start == null) {
+      return 'Upcoming task';
+    }
+
+    String timeOnly(DateTime value) {
+      final hour =
+          value.hour > 12
+              ? value.hour - 12
+              : value.hour == 0
+              ? 12
+              : value.hour;
+      final minutes = value.minute.toString().padLeft(2, '0');
+      final suffix = value.hour >= 12 ? 'PM' : 'AM';
+      return '$hour:$minutes $suffix';
+    }
+
+    if (end == null) {
+      return 'Starts ${timeOnly(start)}';
+    }
+
+    return '${timeOnly(start)} - ${timeOnly(end)}';
   }
 
   Future<void> _openSprintChallenge() async {
@@ -692,16 +480,25 @@ class _DashboardViewState extends State<DashboardView> {
     );
   }
 
-  Color _channelColor(String channel) {
+  Color _channelColor(BuildContext context, String channel) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     switch (channel.trim().toLowerCase()) {
+      case 'high':
+      case 'urgent':
+        return colorScheme.error;
+      case 'medium':
+        return colorScheme.secondary;
+      case 'low':
+        return colorScheme.tertiary;
       case 'email':
-        return const Color(0xFF8B5CF6);
+        return colorScheme.primary;
       case 'push':
-        return const Color(0xFF2563EB);
+        return colorScheme.primary;
       case 'inbox':
-        return const Color(0xFF10B981);
+        return colorScheme.tertiary;
       default:
-        return const Color(0xFF6B7280);
+        return colorScheme.onSurfaceVariant;
     }
   }
 
@@ -715,16 +512,19 @@ class _DashboardViewState extends State<DashboardView> {
   }
 
   Widget _buildStreakBadge(BuildContext context, int streak) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFF97316), Color(0xFFF59E0B)],
+        gradient: LinearGradient(
+          colors: [colorScheme.secondary, colorScheme.secondaryContainer],
         ),
         borderRadius: BorderRadius.circular(999),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFF97316).withValues(alpha: 0.18),
+            color: colorScheme.secondary.withValues(alpha: 0.18),
             blurRadius: 16,
             offset: const Offset(0, 8),
           ),
@@ -733,16 +533,16 @@ class _DashboardViewState extends State<DashboardView> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
+          Icon(
             Icons.local_fire_department_rounded,
-            color: Colors.white,
+            color: colorScheme.onSecondary,
             size: 18,
           ),
           const SizedBox(width: 6),
           Text(
             '$streak',
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: Colors.white,
+            style: theme.textTheme.labelLarge?.copyWith(
+              color: colorScheme.onSecondary,
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -755,10 +555,10 @@ class _DashboardViewState extends State<DashboardView> {
     required int index,
     required double width,
     required Color color,
-    required bool isWhite,
     required Widget child,
   }) {
     final isPressed = _pressedOverviewCards.contains(index);
+    final colorScheme = Theme.of(context).colorScheme;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -788,17 +588,11 @@ class _DashboardViewState extends State<DashboardView> {
             color: color,
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
-              color:
-                  isWhite
-                      ? Colors.white.withValues(alpha: 0.10)
-                      : const Color(0xFFB56CFF).withValues(alpha: 0.26),
+              color: colorScheme.outline.withValues(alpha: 0.26),
             ),
             boxShadow: [
               BoxShadow(
-                color:
-                    isWhite
-                        ? const Color(0xFF8B5CF6).withValues(alpha: 0.16)
-                        : const Color(0xFFB56CFF).withValues(alpha: 0.24),
+                color: colorScheme.primary.withValues(alpha: 0.16),
                 blurRadius: 24,
                 offset: const Offset(0, 12),
               ),
@@ -812,6 +606,7 @@ class _DashboardViewState extends State<DashboardView> {
 
   Widget _buildSprintChallengeCard(BuildContext context) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
     return AnimatedScale(
       scale: _isSprintCardPressed ? 0.98 : 1.0,
@@ -831,23 +626,26 @@ class _DashboardViewState extends State<DashboardView> {
           child: Ink(
             width: double.infinity,
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
+              gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [Color(0xFF332009), Color(0xFF0D0A05)],
+                colors: [
+                  colorScheme.secondaryContainer,
+                  colorScheme.surfaceContainerHighest,
+                ],
               ),
               borderRadius: BorderRadius.circular(24),
               border: Border.all(
-                color: const Color(0xFFFFC857).withValues(alpha: 0.76),
+                color: colorScheme.secondary.withValues(alpha: 0.50),
               ),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFFFFC857).withValues(alpha: 0.22),
+                  color: colorScheme.secondary.withValues(alpha: 0.18),
                   blurRadius: 32,
                   offset: const Offset(0, 16),
                 ),
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.30),
+                  color: colorScheme.shadow.withValues(alpha: 0.18),
                   blurRadius: 24,
                   offset: const Offset(0, 12),
                 ),
@@ -861,15 +659,15 @@ class _DashboardViewState extends State<DashboardView> {
                     width: 58,
                     height: 58,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFFC857).withValues(alpha: 0.14),
+                      color: colorScheme.secondary.withValues(alpha: 0.14),
                       borderRadius: BorderRadius.circular(18),
                       border: Border.all(
-                        color: const Color(0xFFFFC857).withValues(alpha: 0.40),
+                        color: colorScheme.secondary.withValues(alpha: 0.40),
                       ),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.sports_motorsports_rounded,
-                      color: Color(0xFFFFD166),
+                      color: colorScheme.secondary,
                       size: 30,
                     ),
                   ),
@@ -882,7 +680,7 @@ class _DashboardViewState extends State<DashboardView> {
                         Text(
                           'Focus Reward',
                           style: theme.textTheme.labelLarge?.copyWith(
-                            color: const Color(0xFFFFD166),
+                            color: colorScheme.secondary,
                             fontWeight: FontWeight.w800,
                             letterSpacing: 0.8,
                           ),
@@ -893,7 +691,7 @@ class _DashboardViewState extends State<DashboardView> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.titleLarge?.copyWith(
-                            color: Colors.white,
+                            color: colorScheme.onSecondaryContainer,
                             fontWeight: FontWeight.w900,
                           ),
                         ),
@@ -907,10 +705,10 @@ class _DashboardViewState extends State<DashboardView> {
                       vertical: 10,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.10),
+                      color: colorScheme.surface.withValues(alpha: 0.30),
                       borderRadius: BorderRadius.circular(999),
                       border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.16),
+                        color: colorScheme.outline.withValues(alpha: 0.22),
                       ),
                     ),
                     child: Row(
@@ -919,14 +717,14 @@ class _DashboardViewState extends State<DashboardView> {
                         Text(
                           'Tap to Race',
                           style: theme.textTheme.labelLarge?.copyWith(
-                            color: Colors.white,
+                            color: colorScheme.onSecondaryContainer,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
                         const SizedBox(width: 6),
-                        const Icon(
+                        Icon(
                           Icons.arrow_forward_rounded,
-                          color: Colors.white,
+                          color: colorScheme.onSecondaryContainer,
                           size: 18,
                         ),
                       ],
@@ -941,102 +739,253 @@ class _DashboardViewState extends State<DashboardView> {
     );
   }
 
-  Widget _buildReminderCard(BuildContext context, ReminderJobModel reminder) {
+  Widget _buildReminderCard(
+    BuildContext context,
+    DashboardUpcomingBlockDto block,
+  ) {
     final theme = Theme.of(context);
-    final channelColor = _channelColor(reminder.channel);
+    final colorScheme = theme.colorScheme;
+    final channelColor = _channelColor(context, block.priority);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(22),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
+            color: colorScheme.shadow.withValues(
+              alpha: theme.brightness == Brightness.dark ? 0.24 : 0.08,
+            ),
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
         ],
       ),
-      child: Dismissible(
-        key: ValueKey(reminder.id),
-        direction: DismissDirection.endToStart,
-        background: Container(
-          margin: const EdgeInsets.symmetric(vertical: 2),
-          decoration: BoxDecoration(
-            color: const Color(0xFFFEE2E2),
-            borderRadius: BorderRadius.circular(22),
-          ),
-          alignment: Alignment.centerRight,
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Icon(Icons.done_rounded, color: theme.colorScheme.error),
-        ),
-        confirmDismiss: (_) => _dismissReminder(reminder),
-        onDismissed: (_) {
-          setState(() {
-            _activeReminders = _activeReminders
-                .where((entry) => entry.id != reminder.id)
-                .toList(growable: false);
-          });
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF59E0B),
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: const Icon(
-                  Icons.notifications_active_rounded,
-                  color: Colors.white,
-                  size: 24,
-                ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: colorScheme.secondary,
+                borderRadius: BorderRadius.circular(18),
               ),
-              const SizedBox(width: 14),
-              Expanded(
+              child: Icon(
+                Icons.notifications_active_rounded,
+                color: colorScheme.onSecondary,
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    block.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: colorScheme.onSurface,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: channelColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        _channelLabel(block.priority),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: channelColor,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _formatBlockTimestamp(block.startsAt),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDashboardLoadingCard(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Container(
+      height: 170,
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: colorScheme.outline.withValues(alpha: 0.24)),
+      ),
+      child: Center(
+        child: CircularProgressIndicator(color: colorScheme.primary),
+      ),
+    );
+  }
+
+  String _nextClassNameFromSummary(DashboardSummaryDto summary) {
+    final firstBlock =
+        summary.upcomingBlocks.isEmpty ? null : summary.upcomingBlocks.first;
+
+    return summary.nextClassName?.trim().isNotEmpty == true
+        ? summary.nextClassName!.trim()
+        : firstBlock?.title ?? 'No classes today';
+  }
+
+  String _nextClassSubtitleFromSummary(DashboardSummaryDto summary) {
+    final firstBlock =
+        summary.upcomingBlocks.isEmpty ? null : summary.upcomingBlocks.first;
+
+    return summary.nextClassSubtitle?.trim().isNotEmpty == true
+        ? summary.nextClassSubtitle!.trim()
+        : firstBlock == null
+        ? 'Next Class'
+        : _formatBlockTimeRange(firstBlock);
+  }
+
+  Widget _buildDashboardError(BuildContext context, Object error) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      child: Text(
+        error.toString(),
+        style: theme.textTheme.bodyMedium?.copyWith(color: colorScheme.error),
+      ),
+    );
+  }
+
+  Widget _buildOverviewCards(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return FutureBuilder<DashboardSummaryDto>(
+      future: _dashboardFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return _buildDashboardLoadingCard(context);
+        }
+
+        if (snapshot.hasError) {
+          return _buildDashboardError(context, snapshot.error!);
+        }
+
+        if (!snapshot.hasData) {
+          return _buildDashboardError(
+            context,
+            StateError('Dashboard summary completed without data.'),
+          );
+        }
+
+        final summary = snapshot.data!;
+        final pendingTasksValue = summary.pendingTasksCount.toString();
+        final nextClassName = _nextClassNameFromSummary(summary);
+        final nextClassSubtitle = _nextClassSubtitleFromSummary(summary);
+        final nextClassFontSize =
+            nextClassName.length > 28
+                ? 20.0
+                : nextClassName.length > 18
+                ? 22.0
+                : 24.0;
+
+        return SizedBox(
+          height: 170,
+          child: ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            children: [
+              _buildOverviewCard(
+                index: 0,
+                width: 200,
+                color: colorScheme.primaryContainer,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Icon(
+                      Icons.check_rounded,
+                      color: colorScheme.onPrimaryContainer,
+                      size: 30,
+                    ),
+                    const Spacer(),
                     Text(
-                      reminder.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      pendingTasksValue,
+                      style: theme.textTheme.displaySmall?.copyWith(
+                        color: colorScheme.onPrimaryContainer,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Tasks Pending',
                       style: theme.textTheme.titleMedium?.copyWith(
-                        color: Colors.black,
+                        color: colorScheme.onPrimaryContainer,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: channelColor.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Text(
-                          _channelLabel(reminder.channel),
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: channelColor,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 14),
+              _buildOverviewCard(
+                index: 1,
+                width: 240,
+                color: colorScheme.surfaceContainerHighest,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.schedule_rounded,
+                      color: colorScheme.secondary,
+                      size: 30,
+                    ),
+                    const Spacer(),
+                    Text(
+                      nextClassName,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        color: colorScheme.onSurface,
+                        fontSize: nextClassFontSize,
+                        fontWeight: FontWeight.w800,
+                        height: 1.08,
                       ),
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      _formatReminderTimestamp(reminder.reminderAt),
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: Colors.grey.shade600,
+                      nextClassSubtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ],
@@ -1044,32 +993,77 @@ class _DashboardViewState extends State<DashboardView> {
               ),
             ],
           ),
-        ),
-      ),
+        );
+      },
+    );
+  }
+
+  Widget _buildActiveReminders(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return FutureBuilder<DashboardSummaryDto>(
+      future: _dashboardFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            child: LinearProgressIndicator(color: colorScheme.primary),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return _buildDashboardError(context, snapshot.error!);
+        }
+
+        if (!snapshot.hasData) {
+          return _buildDashboardError(
+            context,
+            StateError('Dashboard reminders completed without data.'),
+          );
+        }
+
+        final reminders = snapshot.data!.upcomingBlocks;
+
+        if (reminders.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            child: Text(
+              'No active reminders right now',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+          );
+        }
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: reminders.length,
+            itemBuilder: (context, index) {
+              return _buildReminderCard(context, reminders[index]);
+            },
+          ),
+        );
+      },
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     final displayName = _resolveDisplayName();
     final currentStreak = _currentStreak;
-    final reminders = _activeReminders;
-    final pendingTasksValue = _pendingTasksCount.toString();
-    final nextClassName = _nextClassName;
-    final nextClassSubtitle = _nextClassSubtitle;
-    final nextClassFontSize =
-        nextClassName.length > 28
-            ? 20.0
-            : nextClassName.length > 18
-            ? 22.0
-            : 24.0;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF121014),
+      backgroundColor: theme.scaffoldBackgroundColor,
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: _refreshDashboard,
+          onRefresh: _reloadDashboard,
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.only(bottom: 140.0),
@@ -1088,7 +1082,7 @@ class _DashboardViewState extends State<DashboardView> {
                             Text(
                               'Good morning',
                               style: theme.textTheme.bodySmall?.copyWith(
-                                color: Colors.white70,
+                                color: colorScheme.onSurfaceVariant,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -1098,7 +1092,7 @@ class _DashboardViewState extends State<DashboardView> {
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: theme.textTheme.headlineMedium?.copyWith(
-                                color: Colors.white,
+                                color: colorScheme.onSurface,
                                 fontWeight: FontWeight.w800,
                                 height: 1.05,
                               ),
@@ -1113,12 +1107,12 @@ class _DashboardViewState extends State<DashboardView> {
                           _buildStreakBadge(context, currentStreak),
                           const SizedBox(width: 8),
                           Material(
-                            color: Colors.white,
+                            color: colorScheme.surface,
                             shape: const CircleBorder(),
                             child: IconButton(
                               onPressed: () => _signOut(context),
                               icon: const Icon(Icons.logout_rounded),
-                              color: Colors.black87,
+                              color: colorScheme.onSurface,
                               tooltip: 'Sign Out',
                             ),
                           ),
@@ -1157,22 +1151,23 @@ class _DashboardViewState extends State<DashboardView> {
                         width: double.infinity,
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
-                          gradient: const LinearGradient(
+                          gradient: LinearGradient(
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
-                            colors: [Color(0xFF25163F), Color(0xFF151018)],
+                            colors: [
+                              colorScheme.primaryContainer,
+                              colorScheme.surfaceContainerHighest,
+                            ],
                           ),
                           borderRadius: BorderRadius.circular(24),
                           border: Border.all(
-                            color: const Color(
-                              0xFFB56CFF,
-                            ).withValues(alpha: 0.22),
+                            color: colorScheme.outline.withValues(alpha: 0.22),
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(
-                                0xFF8B5CF6,
-                              ).withValues(alpha: 0.22),
+                              color: colorScheme.primary.withValues(
+                                alpha: 0.18,
+                              ),
                               blurRadius: 30,
                               offset: const Offset(0, 14),
                             ),
@@ -1184,7 +1179,7 @@ class _DashboardViewState extends State<DashboardView> {
                               width: 54,
                               height: 54,
                               decoration: BoxDecoration(
-                                color: const Color(0xFF8B5CF6),
+                                color: colorScheme.primary,
                                 borderRadius: BorderRadius.circular(18),
                               ),
                               child: IconButton(
@@ -1194,7 +1189,7 @@ class _DashboardViewState extends State<DashboardView> {
                                       ? Icons.pause_rounded
                                       : Icons.play_arrow_rounded,
                                 ),
-                                color: Colors.white,
+                                color: colorScheme.onPrimary,
                                 iconSize: 28,
                                 tooltip:
                                     _isFocusTimerActive
@@ -1207,7 +1202,7 @@ class _DashboardViewState extends State<DashboardView> {
                               child: Text(
                                 'Focus Mode',
                                 style: theme.textTheme.titleLarge?.copyWith(
-                                  color: Colors.white,
+                                  color: colorScheme.onPrimaryContainer,
                                   fontWeight: FontWeight.w800,
                                 ),
                               ),
@@ -1220,7 +1215,7 @@ class _DashboardViewState extends State<DashboardView> {
                                   _formatFocusTime(),
                                   style: theme.textTheme.headlineSmall
                                       ?.copyWith(
-                                        color: const Color(0xFFFFD166),
+                                        color: colorScheme.secondary,
                                         fontWeight: FontWeight.w800,
                                       ),
                                 ),
@@ -1238,94 +1233,14 @@ class _DashboardViewState extends State<DashboardView> {
                   child: Text(
                     'QUICK OVERVIEW',
                     style: theme.textTheme.labelLarge?.copyWith(
-                      color: Colors.white70,
+                      color: colorScheme.onSurfaceVariant,
                       fontWeight: FontWeight.w700,
                       letterSpacing: 1.1,
                     ),
                   ),
                 ),
                 const SizedBox(height: 12),
-                SizedBox(
-                  height: 170,
-                  child: ListView(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    scrollDirection: Axis.horizontal,
-                    physics: const BouncingScrollPhysics(),
-                    children: [
-                      _buildOverviewCard(
-                        index: 0,
-                        width: 200,
-                        color: const Color(0xFF8B5CF6),
-                        isWhite: false,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Icon(
-                              Icons.check_rounded,
-                              color: Colors.white,
-                              size: 30,
-                            ),
-                            const Spacer(),
-                            Text(
-                              pendingTasksValue,
-                              style: theme.textTheme.displaySmall?.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              'Tasks Pending',
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                color: Colors.white.withValues(alpha: 0.92),
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      _buildOverviewCard(
-                        index: 1,
-                        width: 240,
-                        color: const Color(0xFF1D1238),
-                        isWhite: true,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Icon(
-                              Icons.schedule_rounded,
-                              color: Color(0xFFFFD166),
-                              size: 30,
-                            ),
-                            const Spacer(),
-                            Text(
-                              nextClassName,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.titleLarge?.copyWith(
-                                color: Colors.white,
-                                fontSize: nextClassFontSize,
-                                fontWeight: FontWeight.w800,
-                                height: 1.08,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              nextClassSubtitle,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                color: Colors.white70,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                _buildOverviewCards(context),
                 const SizedBox(height: 20),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -1339,45 +1254,21 @@ class _DashboardViewState extends State<DashboardView> {
                       Text(
                         'ACTIVE REMINDERS',
                         style: theme.textTheme.labelLarge?.copyWith(
-                          color: Colors.white70,
+                          color: colorScheme.onSurfaceVariant,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 1.1,
                         ),
                       ),
                       const Spacer(),
                       TextButton(
-                        onPressed: _refreshDashboard,
+                        onPressed: _reloadDashboard,
                         child: const Text('View All'),
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 8),
-                if (reminders.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 12,
-                    ),
-                    child: Text(
-                      'No active reminders right now.',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: Colors.white70,
-                      ),
-                    ),
-                  )
-                else
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: reminders.length,
-                      itemBuilder: (context, index) {
-                        return _buildReminderCard(context, reminders[index]);
-                      },
-                    ),
-                  ),
+                _buildActiveReminders(context),
               ],
             ),
           ),

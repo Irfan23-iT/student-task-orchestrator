@@ -31,8 +31,10 @@ class _AIOrchestratorSheetState extends State<AIOrchestratorSheet> {
 
   Future<void> _generateTasks() async {
     final goal = _goalController.text.trim();
+    final messenger = ScaffoldMessenger.of(context);
+
     if (goal.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         const SnackBar(content: Text('Enter a goal before generating tasks.')),
       );
       return;
@@ -57,7 +59,7 @@ class _AIOrchestratorSheetState extends State<AIOrchestratorSheet> {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(content: Text('Unable to generate tasks: $error')),
       );
     } finally {
@@ -77,6 +79,9 @@ class _AIOrchestratorSheetState extends State<AIOrchestratorSheet> {
       );
       return;
     }
+
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
 
     debugPrint(
       '[AIOrchestratorSheet] Save requested for goal="$goal" with ${_generatedTasks.length} generated tasks.',
@@ -98,16 +103,16 @@ class _AIOrchestratorSheetState extends State<AIOrchestratorSheet> {
         return;
       }
 
-      Navigator.pop(context, true);
+      navigator.pop(true);
     } catch (error) {
       debugPrint('[AIOrchestratorSheet] Save failed: $error');
       if (!mounted) {
         return;
       }
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Unable to save tasks: $error')));
+      messenger.showSnackBar(
+        SnackBar(content: Text('Unable to save tasks: $error')),
+      );
     } finally {
       if (mounted) {
         setState(() {

@@ -290,15 +290,31 @@ export const createTaskFromAiAction = async ({ action, db, userId }) => {
 };
 
 const VISION_PARSE_PROMPT = [
-  'You are an academic coordinator. Analyze this image for assignments, exams, or deadlines.',
-  'For every item found, output a raw JSON action block.',
-  'Differentiate between Single Tasks and Complex Projects.',
-  'For projects, generate 3-5 logical milestones as sub-tasks.',
-  'Set task_type to exam, assignment, or general based on the image.',
-  'FORMAT: ACTION: {"type":"CREATE_TASK","data":{"title":"...","description":"...","due_date":"YYYY-MM-DD or null","priority":"High|Medium|Low","task_type":"exam|assignment|general","estimated_minutes":30}}',
-  'FORMAT: ACTION: {"type":"CREATE_PRIMARY_TASK","data":{"title":"...","description":"...","due_date":"YYYY-MM-DD or null","task_type":"exam|assignment|general","sub_tasks":[{"title":"...","due_date":"YYYY-MM-DD or null","estimated_minutes":30,"priority":"High|Medium|Low"}]}}',
-  'Use null when a deadline is not visible. Return only ACTION lines, with no markdown.',
+  'You are an academic coordinator extracting tasks from a student camera image.',
+  'Return ONLY valid JSON. Do not return markdown, prose, comments, or ACTION blocks.',
+  'The JSON MUST be exactly this shape: {"tasks":[{"title":"string","description":"string or null","due_date":"YYYY-MM-DD or null","priority_level":"Low|Medium|High","status":"pending","task_type":"general|exam|assignment|event|reminder","notes":"string or null"}]}',
+  'The tasks array may be empty when no academic tasks, exams, events, reminders, assignments, or deadlines are visible.',
+  'Every task object MUST contain exactly these keys: title, description, due_date, priority_level, status, task_type, notes.',
+  'DEDUPLICATION: If a task appears to be recurring or is mentioned multiple times for the same day, you MUST consolidate it into a SINGLE task entry. Never output duplicate task titles for the same date.',
+  'Never include user_id, id, created_at, category_id, reminders, subtasks, nested objects, or extra keys. The backend owns user_id and persistence metadata.',
+  'Use null for unknown description, due_date, or notes. Use Medium when priority is unclear. Use pending for status.',
 ].join('\n');
+
+const VISION_TASK_KEYS = [
+  'title',
+  'description',
+  'due_date',
+  'priority_level',
+  'status',
+  'task_type',
+  'notes',
+];
+
+const createBadVisionJsonError = (message) => {
+  const error = new Error(message);
+  error.statusCode = 400;
+  return error;
+};
 
 const normalizeImagePayload = (value, explicitMimeType) => {
   const rawValue = String(value || '').trim();
@@ -418,8 +434,17 @@ const normalizeVisionDate = (value) => {
 
 const normalizeVisionTaskType = (value) => {
   const normalized = String(value ?? 'general').trim().toLowerCase();
-  if (normalized === 'exam' || normalized === 'assignment') return normalized;
+  if (['exam', 'assignment', 'event', 'reminder'].includes(normalized)) {
+    return normalized;
+  }
   return 'general';
+};
+
+const normalizeVisionStatus = (value) => {
+  const normalized = String(value ?? 'pending').trim().toLowerCase();
+  if (normalized === 'in progress' || normalized === 'in_progress') return 'in_progress';
+  if (['completed', 'archived'].includes(normalized)) return normalized;
+  return 'pending';
 };
 
 const normalizeEstimatedMinutes = (value) => {
@@ -435,6 +460,150 @@ const normalizeVisionTitle = (value, fallback) => {
   const error = new Error('ACTION data requires a title.');
   error.statusCode = 400;
   throw error;
+};
+
+const isSchemaColumnError = (error) => {
+  const message = String(error?.message || '');
+  return (
+    error?.code === 'PGRST204' ||
+    /could not find|does not exist|schema cache|column/i.test(message)
+  );
+};
+
+const visionTaskDescription = (actionData, item) => {
+  const itemDescription = String(item?.description || '').trim();
+  if (itemDescription) return itemDescription;
+
+  const actionDescription = String(actionData?.description || '').trim();
+  return actionDescription || null;
+};
+
+const visionTaskPayload = ({ userId, actionData, item }) => ({
+  user_id: userId,
+  title: normalizeVisionTitle(item?.title, actionData?.title),
+  description: visionTaskDescription(actionData, item),
+  due_date: normalizeVisionDate(
+    item?.due_date ??
+      item?.dueDate ??
+      actionData?.due_date ??
+      actionData?.dueDate,
+  ),
+  priority_level: normalizePriority(
+    item?.priority ??
+      item?.priority_level ??
+      item?.priorityLevel ??
+      actionData?.priority ??
+      actionData?.priority_level,
+  ),
+  status: normalizeVisionStatus(item?.status ?? actionData?.status),
+  task_type: normalizeVisionTaskType(
+    item?.task_type ?? item?.taskType ?? actionData?.task_type ?? actionData?.taskType,
+  ),
+  notes:
+    item?.notes == null || String(item.notes).trim() === ''
+      ? 'Created from camera scan.'
+      : String(item.notes).trim(),
+});
+
+const dedupeVisionTasksByTitleAndDueDate = (tasks) => {
+  const seen = new Set();
+  return tasks.filter((task) => {
+    const key = `${task.title}\u0000${task.due_date ?? ''}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+const toTaskDto = (row = {}) => ({
+  id: row.id,
+  user_id: row.user_id,
+  title: row.title,
+  description: row.description ?? null,
+  due_date: row.due_date ?? null,
+  priority_level: row.priority_level ?? 'Medium',
+  priority_band: row.priority_level ?? 'Medium',
+  status: row.status ?? (row.is_completed ? 'completed' : 'pending'),
+  task_type: row.task_type ?? 'general',
+  category_id: row.category_id ?? null,
+  notes: row.notes ?? null,
+  is_completed: row.is_completed ?? String(row.status || '').toLowerCase() === 'completed',
+  created_at: row.created_at,
+});
+
+const createStandardTasksForVision = async ({ db, userId, actionData, items }) => {
+  if (!items.length) return [];
+
+  let insertPayload = items.map((item) =>
+    visionTaskPayload({ userId, actionData, item }),
+  );
+  insertPayload = dedupeVisionTasksByTitleAndDueDate(insertPayload);
+  if (!insertPayload.length) return [];
+
+  let result = await db
+    .from('tasks')
+    .insert(insertPayload)
+    .select('id, user_id, title, description, due_date, priority_level, status, task_type, category_id, notes, created_at');
+
+  if (result.error && isSchemaColumnError(result.error)) {
+    insertPayload = insertPayload.map(({ task_type, notes, ...payload }) => payload);
+    result = await db
+      .from('tasks')
+      .insert(insertPayload)
+      .select('id, user_id, title, description, due_date, priority_level, status, created_at');
+  }
+
+  if (result.error) throw result.error;
+  return (result.data || []).map(toTaskDto);
+};
+
+const normalizeVisionReminderAt = (value) => {
+  if (value == null || value === '') return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString();
+};
+
+const getVisionReminderAt = (actionData, item) =>
+  normalizeVisionReminderAt(
+    item?.reminder_at ??
+      item?.reminderAt ??
+      actionData?.reminder_at ??
+      actionData?.reminderAt,
+  );
+
+const createReminderJobsForVision = async ({ db, userId, actionData, items, tasks }) => {
+  const insertPayload = tasks
+    .map((task, index) => {
+      const reminderAt = getVisionReminderAt(actionData, items[index] || {});
+      if (!reminderAt) return null;
+
+      return {
+        user_id: userId,
+        sub_task_id: null,
+        title: `Reminder: ${task.title}`,
+        reminder_at: reminderAt,
+        channel: 'inbox',
+        status: 'scheduled',
+        payload: {
+          task_id: task.id,
+          task_table: 'tasks',
+          task_type: 'task',
+          source: 'camera_scan',
+        },
+      };
+    })
+    .filter(Boolean);
+
+  if (insertPayload.length === 0) return [];
+
+  const { data, error } = await db
+    .from('reminder_jobs')
+    .insert(insertPayload)
+    .select('*');
+
+  if (error) throw error;
+  return data || [];
 };
 
 const createPrimaryTaskForVision = async ({ db, userId, data, subTaskCount }) => {
@@ -505,6 +674,10 @@ const createSubTasksForVision = async ({ db, primaryTaskId, userId, items }) => 
 
 const getVisionSubTasks = (action) => {
   const data = action?.data || {};
+  if (action?.type === 'CREATE_TASK') {
+    return [data];
+  }
+
   const taskItems =
     data.sub_tasks ||
     data.subTasks ||
@@ -549,6 +722,19 @@ export const executeVisionActions = async ({ actions, db, userId }) => {
       data: action.data,
       subTaskCount: subTaskItems.length,
     });
+    const tasks = await createStandardTasksForVision({
+      db,
+      userId,
+      actionData: action.data,
+      items: subTaskItems,
+    });
+    const reminders = await createReminderJobsForVision({
+      db,
+      userId,
+      actionData: action.data,
+      items: subTaskItems,
+      tasks,
+    });
     const subTasks = await createSubTasksForVision({
       db,
       primaryTaskId: primaryTask.id,
@@ -559,6 +745,8 @@ export const executeVisionActions = async ({ actions, db, userId }) => {
     created.push({
       actionType: action.type,
       primaryTask,
+      tasks,
+      reminders,
       subTasks,
     });
   }
@@ -578,11 +766,80 @@ const generateVisionActionText = async ({ imageBase64, mimeType }) => {
     config: {
       temperature: 0.2,
       maxOutputTokens: 2048,
+      responseMimeType: 'application/json',
     },
   });
 
   return response.text || '';
 };
+
+const parseStrictVisionTasks = (text) => {
+  const trimmed = String(text || '').trim();
+  if (!trimmed) {
+    throw createBadVisionJsonError('AI returned an empty JSON payload.');
+  }
+
+  const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  const candidate = fenceMatch?.[1]?.trim() || trimmed;
+
+  let parsed;
+  try {
+    parsed = JSON.parse(candidate);
+  } catch {
+    throw createBadVisionJsonError('AI returned malformed JSON for vision tasks.');
+  }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw createBadVisionJsonError('AI vision JSON must be an object with a tasks array.');
+  }
+
+  const rootKeys = Object.keys(parsed);
+  if (rootKeys.length !== 1 || rootKeys[0] !== 'tasks') {
+    throw createBadVisionJsonError('AI vision JSON must contain only the tasks key.');
+  }
+
+  if (!Array.isArray(parsed.tasks)) {
+    throw createBadVisionJsonError('AI vision JSON tasks must be an array.');
+  }
+
+  return parsed.tasks.slice(0, 10).map((task, index) => {
+    if (!task || typeof task !== 'object' || Array.isArray(task)) {
+      throw createBadVisionJsonError(`AI vision task at index ${index} must be an object.`);
+    }
+
+    const keys = Object.keys(task);
+    const extraKeys = keys.filter((key) => !VISION_TASK_KEYS.includes(key));
+    const missingKeys = VISION_TASK_KEYS.filter((key) => !keys.includes(key));
+    if (extraKeys.length > 0 || missingKeys.length > 0) {
+      throw createBadVisionJsonError(
+        `AI vision task at index ${index} does not match the tasks schema.`,
+      );
+    }
+
+    const title = normalizeVisionTitle(task.title);
+    return {
+      title,
+      description:
+        task.description == null || String(task.description).trim() === ''
+          ? null
+          : String(task.description).trim(),
+      due_date: normalizeVisionDate(task.due_date),
+      priority_level: normalizePriority(task.priority_level),
+      status: normalizeVisionStatus(task.status),
+      task_type: normalizeVisionTaskType(task.task_type),
+      notes:
+        task.notes == null || String(task.notes).trim() === ''
+          ? null
+          : String(task.notes).trim(),
+    };
+  });
+};
+
+const visionTasksToActions = (tasks) =>
+  tasks.map((task) => ({
+    type: 'CREATE_TASK',
+    data: task,
+  }));
 
 export const createVisionParseResponse = async ({
   imageBase64,
@@ -592,7 +849,8 @@ export const createVisionParseResponse = async ({
   generateText = generateVisionActionText,
 }) => {
   const aiText = await generateText({ imageBase64, mimeType });
-  const { actions } = extractActionDirectives(aiText);
+  const tasks = dedupeVisionTasksByTitleAndDueDate(parseStrictVisionTasks(aiText));
+  const actions = visionTasksToActions(tasks);
 
   if (actions.length === 0) {
     return {
@@ -608,6 +866,7 @@ export const createVisionParseResponse = async ({
     message: `Created ${created.length} academic task group${created.length === 1 ? '' : 's'} from the image.`,
     actionsParsed: actions.length,
     created,
+    tasks: created.flatMap((entry) => entry.tasks || []),
   };
 };
 

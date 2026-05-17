@@ -5,7 +5,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/app_theme.dart';
 import 'core/config/env_config.dart';
-import 'core/theme_provider.dart';
 import 'features/auth/login_screen.dart';
 import 'features/home/main_screen.dart';
 import 'services/api_service.dart';
@@ -28,13 +27,11 @@ class _StudentTaskOrchestratorApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final themeMode = ref.watch(themeModeProvider);
-
     return MaterialApp(
       title: 'RakanStudent Mobile',
       debugShowCheckedModeBanner: false,
       routes: {'/login': (_) => const LoginScreen()},
-      themeMode: themeMode,
+      themeMode: ThemeMode.light,
       theme: RakanAppTheme.lightTheme,
       darkTheme: RakanAppTheme.darkTheme,
       home: const _StartupGate(),

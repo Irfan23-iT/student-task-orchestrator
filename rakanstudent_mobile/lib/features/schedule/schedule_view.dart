@@ -13,6 +13,8 @@ class ScheduleView extends StatefulWidget {
 }
 
 class _ScheduleViewState extends State<ScheduleView> {
+  final ApiService _apiService = ApiService();
+
   List<ClassModel> _classes = const [];
   bool _isLoading = true;
 
@@ -25,7 +27,7 @@ class _ScheduleViewState extends State<ScheduleView> {
 
   Future<void> _fetchClasses() async {
     try {
-      final classes = await ApiService().fetchFixedClasses();
+      final classes = await _apiService.fetchFixedClasses();
 
       if (!mounted) {
         return;
@@ -50,7 +52,7 @@ class _ScheduleViewState extends State<ScheduleView> {
   Future<void> _runScheduleMigrationTest() async {
     try {
       print('--- CODEX SCHEDULE MIGRATION TEST START ---');
-      final classes = await ApiService().fetchFixedClasses();
+      final classes = await _apiService.fetchFixedClasses();
       print(
         '--- CODEX SCHEDULE MIGRATION SUCCESS: Fetched ${classes.length} fixed classes from API ---',
       );
@@ -72,6 +74,65 @@ class _ScheduleViewState extends State<ScheduleView> {
     }
 
     await _fetchClasses();
+  }
+
+  Future<bool> _confirmDeleteClass(ClassModel classItem) async {
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Delete class?'),
+            content: Text(
+              'Are you sure you want to delete ${classItem.className}?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.error,
+                  foregroundColor: Theme.of(context).colorScheme.onError,
+                ),
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+    );
+
+    return shouldDelete == true;
+  }
+
+  Future<bool> _deleteClass(ClassModel classItem) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    final classId = classItem.id;
+    if (classId == null || classId.trim().isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('This class is missing a database id.')),
+      );
+      return false;
+    }
+
+    try {
+      await _apiService.deleteClass(classId);
+      if (!mounted || !navigator.mounted) {
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      if (!mounted) {
+        return false;
+      }
+
+      messenger.showSnackBar(
+        SnackBar(content: Text('Unable to delete class: $error')),
+      );
+      return false;
+    }
   }
 
   String _dayLabel(int dayOfWeek) {
@@ -127,10 +188,10 @@ class _ScheduleViewState extends State<ScheduleView> {
     int index,
   ) {
     final theme = Theme.of(context);
+    final messenger = ScaffoldMessenger.of(context);
     final accent = _accentColor(index);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+    final card = Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -202,6 +263,48 @@ class _ScheduleViewState extends State<ScheduleView> {
             ),
           ),
         ],
+      ),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Dismissible(
+        key: ValueKey(classItem.id ?? '${classItem.className}-$index'),
+        direction: DismissDirection.endToStart,
+        confirmDismiss: (_) async {
+          final shouldDelete = await _confirmDeleteClass(classItem);
+          if (!shouldDelete) {
+            return false;
+          }
+
+          return _deleteClass(classItem);
+        },
+        onDismissed: (_) {
+          final classId = classItem.id;
+          setState(() {
+            _classes = _classes
+                .where((entry) => entry.id != classId)
+                .toList(growable: false);
+          });
+
+          messenger.showSnackBar(
+            SnackBar(content: Text('${classItem.className} deleted.')),
+          );
+        },
+        background: const SizedBox.shrink(),
+        secondaryBackground: Container(
+          alignment: Alignment.centerRight,
+          padding: const EdgeInsets.only(right: 24),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.error,
+            borderRadius: BorderRadius.circular(22),
+          ),
+          child: Icon(
+            Icons.delete_rounded,
+            color: Theme.of(context).colorScheme.onError,
+          ),
+        ),
+        child: card,
       ),
     );
   }
@@ -294,6 +397,7 @@ class AddSubjectSheet extends StatefulWidget {
 }
 
 class _AddSubjectSheetState extends State<AddSubjectSheet> {
+  final ApiService _apiService = ApiService();
   final TextEditingController _subjectNameController = TextEditingController();
   final TextEditingController _classTypeController = TextEditingController(
     text: 'Lecture',
@@ -324,6 +428,9 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
   }
 
   Future<void> _saveSubject() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+
     FocusScope.of(context).unfocus();
     final subjectName = _subjectNameController.text.trim();
     final classType = _classTypeController.text.trim();
@@ -334,7 +441,7 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
         classType.isEmpty ||
         startTime.isEmpty ||
         endTime.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         const SnackBar(content: Text('Fill in all subject details first.')),
       );
       return;
@@ -355,22 +462,22 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
         classType: classType,
       );
 
-      await ApiService().saveFixedClass(newClass);
+      await _apiService.saveFixedClass(newClass);
       didSave = true;
 
       if (!mounted) {
         return;
       }
 
-      Navigator.of(context).pop(true);
+      navigator.pop(true);
     } catch (error) {
       if (!mounted) {
         return;
       }
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Unable to add subject: $error')));
+      messenger.showSnackBar(
+        SnackBar(content: Text('Unable to add subject: $error')),
+      );
     } finally {
       if (mounted && _isSaving && !didSave) {
         setState(() {

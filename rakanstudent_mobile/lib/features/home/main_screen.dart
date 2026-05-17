@@ -56,6 +56,7 @@ class _MainScreenState extends State<MainScreen> {
   }) {
     final isActive = _currentIndex == index;
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
     if (isActive) {
       return AnimatedContainer(
@@ -64,13 +65,13 @@ class _MainScreenState extends State<MainScreen> {
         curve: Curves.easeOut,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: const Color(0xFF111827),
+          color: colorScheme.primary,
           borderRadius: BorderRadius.circular(999),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: Colors.white, size: 22),
+            Icon(icon, color: colorScheme.onPrimary, size: 22),
             const SizedBox(width: 8),
             Flexible(
               child: Text(
@@ -78,7 +79,7 @@ class _MainScreenState extends State<MainScreen> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.labelMedium?.copyWith(
-                  color: Colors.white,
+                  color: colorScheme.onPrimary,
                   fontWeight: FontWeight.w700,
                   fontSize: 12,
                 ),
@@ -89,7 +90,12 @@ class _MainScreenState extends State<MainScreen> {
       );
     }
 
-    return Icon(icon, key: key, color: Colors.grey, size: 26);
+    return Icon(
+      icon,
+      key: key,
+      color: theme.colorScheme.onSurfaceVariant,
+      size: 26,
+    );
   }
 
   Widget _buildNavButton({
@@ -131,17 +137,22 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Widget _buildCustomNavBar() {
+    final theme = Theme.of(context);
+
     return Container(
       width: double.infinity,
       height: 75.0,
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(35),
-        boxShadow: const [
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(999),
+        boxShadow: [
           BoxShadow(
-            color: Colors.black12,
-            blurRadius: 20,
-            offset: Offset(0, 8),
+            color: Colors.black.withValues(
+              alpha: theme.brightness == Brightness.dark ? 0.20 : 0.10,
+            ),
+            blurRadius: 32,
+            spreadRadius: 2,
+            offset: const Offset(0, 14),
           ),
         ],
       ),
@@ -200,42 +211,35 @@ class _MainScreenState extends State<MainScreen> {
 
     SystemChrome.setSystemUIOverlayStyle(
       SystemUiOverlayStyle(
-        systemNavigationBarColor: Colors.transparent,
-        systemNavigationBarIconBrightness: Brightness.dark,
+        systemNavigationBarColor: Theme.of(context).colorScheme.surface,
+        systemNavigationBarIconBrightness:
+            Theme.of(context).brightness == Brightness.dark
+                ? Brightness.light
+                : Brightness.dark,
         systemNavigationBarDividerColor: Colors.transparent,
       ),
     );
 
-    return Container(
-      constraints: const BoxConstraints.expand(),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xFF241033), Color(0xFF121014), Color(0xFF08070A)],
-        ),
-      ),
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        body: Stack(
-          children: [
-            Positioned.fill(
-              child: IndexedStack(index: _currentIndex, children: screens),
-            ),
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: SafeArea(
-                top: false,
-                minimum: const EdgeInsets.only(
-                  bottom: 16.0,
-                  left: 24.0,
-                  right: 24.0,
-                ),
-                child: _buildCustomNavBar(),
+    return Scaffold(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: IndexedStack(index: _currentIndex, children: screens),
+          ),
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: SafeArea(
+              top: false,
+              minimum: const EdgeInsets.only(
+                bottom: 18.0,
+                left: 24.0,
+                right: 24.0,
               ),
+              child: _buildCustomNavBar(),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

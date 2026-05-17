@@ -70,9 +70,70 @@ const normalizeClassPayload = (item = {}) => ({
   class_type: normalizeClassType(item.class_type ?? item.classType)
 });
 
+const parseTimeToMinutes = (value) => {
+  const match = String(value || '').trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (!match) return null;
+
+  const hours = Number.parseInt(match[1], 10);
+  const minutes = Number.parseInt(match[2], 10);
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+
+  return hours * 60 + minutes;
+};
+
+const hasTimeOverlap = (left, right) =>
+  left.startMinutes < right.endMinutes && left.endMinutes > right.startMinutes;
+
+const assertNoBatchTimeConflicts = (classes) => {
+  const windows = classes.map((item, index) => ({
+    index,
+    day_of_week: item.day_of_week,
+    startMinutes: parseTimeToMinutes(item.start_time),
+    endMinutes: parseTimeToMinutes(item.end_time)
+  }));
+
+  windows.forEach((window, index) => {
+    assert(window.startMinutes != null, `Class ${index + 1} start_time is invalid.`);
+    assert(window.endMinutes != null, `Class ${index + 1} end_time is invalid.`);
+    assert(window.startMinutes < window.endMinutes, `Class ${index + 1} start_time must be before end_time.`);
+  });
+
+  for (let leftIndex = 0; leftIndex < windows.length; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < windows.length; rightIndex += 1) {
+      const left = windows[leftIndex];
+      const right = windows[rightIndex];
+      if (left.day_of_week === right.day_of_week && hasTimeOverlap(left, right)) {
+        assert(false, 'Time conflict: This overlaps with an existing class.');
+      }
+    }
+  }
+};
+
+const assertNoExistingTimeConflicts = async ({ db, userId, classes, excludeClassId }) => {
+  for (const item of classes) {
+    let query = db
+      .from('fixed_classes')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('day_of_week', item.day_of_week)
+      .lt('start_time', item.end_time)
+      .gt('end_time', item.start_time);
+
+    if (excludeClassId) {
+      query = query.neq('id', excludeClassId);
+    }
+
+    const { data, error } = await query.limit(1);
+
+    if (error) throw error;
+    assert((data || []).length === 0, 'Time conflict: This overlaps with an existing class.');
+  }
+};
+
 export const listFixedClasses = async (req, res) => {
   try {
-    const { data, error } = await supabase
+    const db = req.supabase || supabase;
+    const { data, error } = await db
       .from('fixed_classes')
       .select('*')
       .eq('user_id', req.user.id)
@@ -93,6 +154,7 @@ export const listFixedClasses = async (req, res) => {
 
 export const bulkCreateFixedClasses = async (req, res) => {
   try {
+    const db = req.supabase || supabase;
     const classes = Array.isArray(req.body?.classes) ? req.body.classes : [];
     if (classes.length === 0) {
       return res.status(400).json({ error: 'At least one class is required.' });
@@ -105,6 +167,12 @@ export const bulkCreateFixedClasses = async (req, res) => {
       assert(item.end_time.length > 0, `Class ${index + 1} end_time is required.`);
       assert(item.class_name.length > 0, `Class ${index + 1} class_name is required.`);
     });
+    assertNoBatchTimeConflicts(normalizedClasses);
+    await assertNoExistingTimeConflicts({
+      db,
+      userId: req.user.id,
+      classes: normalizedClasses
+    });
 
     const insertPayload = normalizedClasses.map((item) => ({
       user_id: req.user.id,
@@ -115,7 +183,7 @@ export const bulkCreateFixedClasses = async (req, res) => {
       class_type: item.class_type
     }));
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('fixed_classes')
       .insert(insertPayload)
       .select('*');
@@ -126,6 +194,85 @@ export const bulkCreateFixedClasses = async (req, res) => {
   } catch (error) {
     const statusCode = getErrorStatusCode(error);
     console.error('Fixed Class Save Failed:', error.message, 'Payload received:', req.body);
+    res.status(statusCode).json({
+      error: error.message,
+      details: error.message
+    });
+  }
+};
+
+export const updateFixedClass = async (req, res) => {
+  try {
+    const db = req.supabase || supabase;
+    const classId = String(req.params?.id || '').trim();
+    assert(classId.length > 0, 'Class id is required.');
+
+    const normalizedClass = normalizeClassPayload(req.body || {});
+    assert(['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].includes(normalizedClass.day_of_week), 'Class day_of_week is invalid.');
+    assert(normalizedClass.start_time.length > 0, 'Class start_time is required.');
+    assert(normalizedClass.end_time.length > 0, 'Class end_time is required.');
+    assert(normalizedClass.class_name.length > 0, 'Class class_name is required.');
+    assertNoBatchTimeConflicts([normalizedClass]);
+    await assertNoExistingTimeConflicts({
+      db,
+      userId: req.user.id,
+      classes: [normalizedClass],
+      excludeClassId: classId
+    });
+
+    const { data, error } = await db
+      .from('fixed_classes')
+      .update({
+        day_of_week: normalizedClass.day_of_week,
+        start_time: normalizedClass.start_time,
+        end_time: normalizedClass.end_time,
+        class_name: normalizedClass.class_name,
+        class_type: normalizedClass.class_type
+      })
+      .eq('id', classId)
+      .eq('user_id', req.user.id)
+      .select('*')
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) {
+      return res.status(404).json({ error: 'Class not found.' });
+    }
+
+    res.status(200).json({ class: normalizeRows([data])[0] });
+  } catch (error) {
+    const statusCode = getErrorStatusCode(error);
+    console.error('Fixed Class Update Failed:', error.message, 'Class:', req.params?.id, 'Payload received:', req.body);
+    res.status(statusCode).json({
+      error: error.message,
+      details: error.message
+    });
+  }
+};
+
+export const deleteFixedClass = async (req, res) => {
+  try {
+    const db = req.supabase || supabase;
+    const classId = String(req.params?.id || '').trim();
+    assert(classId.length > 0, 'Class id is required.');
+
+    const { data, error } = await db
+      .from('fixed_classes')
+      .delete()
+      .eq('id', classId)
+      .eq('user_id', req.user.id)
+      .select('id')
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) {
+      return res.status(404).json({ error: 'Class not found.' });
+    }
+
+    res.status(200).json({ success: true, id: data.id });
+  } catch (error) {
+    const statusCode = getErrorStatusCode(error);
+    console.error('Fixed Class Delete Failed:', error.message, 'Class:', req.params?.id, 'User:', req.user?.id);
     res.status(statusCode).json({
       error: error.message,
       details: error.message

@@ -117,6 +117,9 @@ class _AddCustomTaskScreenState extends State<AddCustomTaskScreen> {
       _isSaving = true;
     });
 
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+
     try {
       await _apiService.createTask({
         'title': title,
@@ -130,14 +133,12 @@ class _AddCustomTaskScreenState extends State<AddCustomTaskScreen> {
         return;
       }
 
-      final navigator = Navigator.of(context);
       navigator.pop(true);
     } on SocketException {
       if (!mounted) {
         return;
       }
 
-      final messenger = ScaffoldMessenger.of(context);
       messenger.showSnackBar(
         const SnackBar(
           content: Text('Cannot reach server right now. Please try again.'),
@@ -151,7 +152,6 @@ class _AddCustomTaskScreenState extends State<AddCustomTaskScreen> {
         return;
       }
 
-      final messenger = ScaffoldMessenger.of(context);
       messenger.showSnackBar(
         SnackBar(content: Text('Unable to create task: $error')),
       );

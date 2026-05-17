@@ -13,6 +13,7 @@ class RakanStudentApp extends StatelessWidget {
       title: 'RakanStudent Mobile',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
       home: const AppErrorBanner(child: AuthGate()),
     );
   }

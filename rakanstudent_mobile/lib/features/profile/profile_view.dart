@@ -198,23 +198,9 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
       _isSaving = true;
     });
 
+    final messenger = ScaffoldMessenger.of(context);
+
     try {
-      final supabase = Supabase.instance.client;
-      final userId = supabase.auth.currentUser?.id;
-      if (userId == null || userId.isEmpty) {
-        throw StateError('No authenticated user found.');
-      }
-
-      await supabase.from('user_preferences').upsert({
-        'user_id': userId,
-        'wake_time': wakeTime,
-        'sleep_time': sleepTime,
-      }, onConflict: 'user_id');
-
-      if (!mounted) {
-        return;
-      }
-
       final updatedSettings = (currentSettings ??
               const SettingsModel(
                 wakeTime: '07:00',
@@ -229,11 +215,17 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
               ))
           .copyWith(wakeTime: wakeTime, sleepTime: sleepTime);
 
+      await _apiService.updateProfileSettings(updatedSettings);
+
+      if (!mounted) {
+        return;
+      }
+
       setState(() {
         _settings = updatedSettings;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         const SnackBar(content: Text('Settings Saved Successfully')),
       );
     } catch (e) {
@@ -241,9 +233,9 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
         return;
       }
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Unable to save settings: $e')));
+      messenger.showSnackBar(
+        SnackBar(content: Text('Unable to save settings: $e')),
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -263,8 +255,6 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
-        final navigator = Navigator.of(dialogContext);
-
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
@@ -276,7 +266,8 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
               ),
               actions: [
                 TextButton(
-                  onPressed: isSubmitting ? null : () => navigator.pop(),
+                  onPressed:
+                      isSubmitting ? null : () => Navigator.of(context).pop(),
                   child: const Text('Cancel'),
                 ),
                 FilledButton(
@@ -289,31 +280,37 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
                               return;
                             }
 
+                            final messenger = ScaffoldMessenger.of(context);
+                            final navigator = Navigator.of(context);
+                            var didCloseDialog = false;
+
                             try {
                               setDialogState(() {
                                 isSubmitting = true;
                               });
                               await _apiService.updateProfile(nextName);
 
-                              if (!mounted || !context.mounted) {
+                              if (!mounted) {
                                 return;
                               }
 
                               setState(() {
                                 _displayName = nextName;
                               });
-                              Navigator.of(context).pop();
-                              ScaffoldMessenger.of(context).showSnackBar(
+                              navigator.pop();
+                              didCloseDialog = true;
+
+                              messenger.showSnackBar(
                                 const SnackBar(
                                   content: Text('Profile name updated'),
                                 ),
                               );
                             } catch (e) {
-                              if (!context.mounted) {
+                              if (!mounted) {
                                 return;
                               }
 
-                              ScaffoldMessenger.of(context).showSnackBar(
+                              messenger.showSnackBar(
                                 SnackBar(
                                   content: Text(
                                     'Unable to update profile name: $e',
@@ -321,7 +318,7 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
                                 ),
                               );
                             } finally {
-                              if (context.mounted) {
+                              if (!didCloseDialog) {
                                 setDialogState(() {
                                   isSubmitting = false;
                                 });
@@ -436,6 +433,9 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
   }
 
   Widget _buildLabeledTimeRow({required String label, required String value}) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -444,8 +444,8 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
             width: 96,
             child: Text(
               label,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Colors.black,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onSurface,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -454,7 +454,7 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
-                color: const Color(0xFFF3F4F6),
+                color: colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(999),
               ),
               child: Row(
@@ -462,13 +462,13 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
                   Icon(
                     Icons.schedule_rounded,
                     size: 18,
-                    color: Colors.grey.shade600,
+                    color: colorScheme.onSurfaceVariant,
                   ),
                   const SizedBox(width: 8),
                   Text(
                     value,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.grey.shade700,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -492,10 +492,13 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
         displayName.isEmpty ? 'U' : displayName.substring(0, 1).toUpperCase();
     final joinedDate = _formatJoinedDate(user?.createdAt);
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     final calendarConnected = _isCalendarConnected == true;
+    final cardShadow = Colors.black.withValues(
+      alpha: theme.brightness == Brightness.dark ? 0.32 : 0.08,
+    );
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
       body: SafeArea(
         bottom: false,
         child: ListView(
@@ -504,7 +507,7 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
             Text(
               'Profile',
               style: theme.textTheme.headlineMedium?.copyWith(
-                color: Colors.black,
+                color: colorScheme.onSurface,
                 fontWeight: FontWeight.w800,
               ),
             ),
@@ -512,11 +515,11 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
             Container(
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: colorScheme.surface,
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
+                    color: cardShadow,
                     blurRadius: 18,
                     offset: const Offset(0, 8),
                   ),
@@ -528,15 +531,15 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
                   Container(
                     width: 74,
                     height: 74,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF7C3AED),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary,
                       shape: BoxShape.circle,
                     ),
                     alignment: Alignment.center,
                     child: Text(
                       avatarLetter,
                       style: theme.textTheme.headlineSmall?.copyWith(
-                        color: Colors.white,
+                        color: colorScheme.onPrimary,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
@@ -554,7 +557,7 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                                 style: theme.textTheme.titleLarge?.copyWith(
-                                  color: Colors.black,
+                                  color: colorScheme.onSurface,
                                   fontWeight: FontWeight.w800,
                                 ),
                               ),
@@ -563,7 +566,7 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
                               onPressed: _showEditNameDialog,
                               icon: const Icon(Icons.edit_outlined),
                               tooltip: 'Edit name',
-                              color: Colors.grey.shade600,
+                              color: colorScheme.onSurfaceVariant,
                             ),
                           ],
                         ),
@@ -571,14 +574,14 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
                         Text(
                           email,
                           style: theme.textTheme.bodyMedium?.copyWith(
-                            color: Colors.grey.shade600,
+                            color: colorScheme.onSurfaceVariant,
                           ),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           'Joined $joinedDate',
                           style: theme.textTheme.bodyMedium?.copyWith(
-                            color: Colors.grey.shade600,
+                            color: colorScheme.onSurfaceVariant,
                           ),
                         ),
                       ],
@@ -591,11 +594,11 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
             Container(
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: colorScheme.surface,
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
+                    color: cardShadow,
                     blurRadius: 18,
                     offset: const Offset(0, 8),
                   ),
@@ -607,7 +610,7 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
                   Text(
                     'Sleep Schedule',
                     style: theme.textTheme.titleLarge?.copyWith(
-                      color: Colors.black,
+                      color: colorScheme.onSurface,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
@@ -632,8 +635,6 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
                     child: FilledButton(
                       onPressed: _isSaving ? null : _saveSettings,
                       style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF7C3AED),
-                        foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(999),
@@ -646,7 +647,6 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
                                 height: 18,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  color: Colors.white,
                                 ),
                               )
                               : const Text(
@@ -662,11 +662,11 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
             Container(
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: colorScheme.surface,
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
+                    color: cardShadow,
                     blurRadius: 18,
                     offset: const Offset(0, 8),
                   ),
@@ -678,7 +678,7 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
                   Text(
                     'Integrations',
                     style: theme.textTheme.titleLarge?.copyWith(
-                      color: Colors.black,
+                      color: colorScheme.onSurface,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
@@ -690,12 +690,12 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
                         width: 42,
                         height: 42,
                         decoration: BoxDecoration(
-                          color: const Color(0xFFE0F2FE),
+                          color: colorScheme.primaryContainer,
                           borderRadius: BorderRadius.circular(14),
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.calendar_month_rounded,
-                          color: Color(0xFF2563EB),
+                          color: colorScheme.onPrimaryContainer,
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -706,7 +706,7 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
                             Text(
                               'Google Calendar',
                               style: theme.textTheme.titleMedium?.copyWith(
-                                color: Colors.black,
+                                color: colorScheme.onSurface,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
@@ -714,7 +714,7 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
                             Text(
                               calendarConnected ? 'Connected' : 'Not Connected',
                               style: theme.textTheme.bodyMedium?.copyWith(
-                                color: Colors.grey.shade600,
+                                color: colorScheme.onSurfaceVariant,
                               ),
                             ),
                           ],
@@ -724,8 +724,8 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
                       FilledButton(
                         onPressed: _syncCalendar,
                         style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFFEDE9FE),
-                          foregroundColor: const Color(0xFF7C3AED),
+                          backgroundColor: colorScheme.primaryContainer,
+                          foregroundColor: colorScheme.onPrimaryContainer,
                           padding: const EdgeInsets.symmetric(
                             horizontal: 18,
                             vertical: 12,
@@ -749,7 +749,7 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
+                    color: cardShadow,
                     blurRadius: 18,
                     offset: const Offset(0, 8),
                   ),
@@ -763,10 +763,7 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
                   isDarkMode
                       ? Icons.dark_mode_rounded
                       : Icons.light_mode_rounded,
-                  color:
-                      isDarkMode
-                          ? const Color(0xFFFFC857)
-                          : const Color(0xFF7C3AED),
+                  color: colorScheme.primary,
                 ),
                 title: Text(
                   isDarkMode ? 'Dark Mode' : 'Light Mode',
@@ -792,8 +789,8 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
               child: OutlinedButton.icon(
                 onPressed: () => _signOut(context),
                 style: OutlinedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFEE2E2),
-                  foregroundColor: const Color(0xFFDC2626),
+                  backgroundColor: colorScheme.errorContainer,
+                  foregroundColor: colorScheme.onErrorContainer,
                   side: BorderSide.none,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(

@@ -15,6 +15,7 @@ import workspaceRoutes from './routes/workspaces.js';
 import settingsRoutes from './routes/settings.js';
 import pipelineRoutes from './routes/pipeline.js';
 import aiRoutes from './routes/ai.js';
+import focusRoutes from './routes/focus.js';
 import { completeCalendarOAuthCallback } from './controllers/calendarController.js';
 import { startCalendarSyncLoop } from './lib/calendarService.js';
 import { startNotificationDispatchLoop } from './lib/notificationService.js';
@@ -97,6 +98,7 @@ app.use('/api/workspaces', workspaceRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/pipeline', pipelineRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/focus', focusRoutes);
 
 const supaUrl = new URL(process.env.SUPABASE_URL || 'https://localhost');
 try {

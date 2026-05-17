@@ -47,6 +47,148 @@ class AiChatResponse {
   final String? actionType;
 }
 
+class DashboardSummaryDto {
+  const DashboardSummaryDto({
+    required this.upcomingBlocks,
+    required this.pendingTasksCount,
+    this.nextClassName,
+    this.nextClassSubtitle,
+  });
+
+  final List<DashboardUpcomingBlockDto> upcomingBlocks;
+  final int pendingTasksCount;
+  final String? nextClassName;
+  final String? nextClassSubtitle;
+
+  factory DashboardSummaryDto.fromJson(Map<String, dynamic> json) {
+    final tasks = (json['tasks'] as List<dynamic>?) ?? const [];
+    final reminderJobs = (json['reminderJobs'] as List<dynamic>?) ?? const [];
+    final blocks =
+        ((json['upcoming_blocks'] ?? json['upcomingBlocks'])
+            as List<dynamic>?) ??
+        reminderJobs;
+
+    return DashboardSummaryDto(
+      upcomingBlocks: blocks
+          .whereType<Map>()
+          .map(
+            (block) => DashboardUpcomingBlockDto.fromJson(
+              Map<String, dynamic>.from(block),
+            ),
+          )
+          .toList(growable: false),
+      pendingTasksCount: _dashboardInt(
+        json['pending_tasks_count'] ??
+            json['pendingTasksCount'] ??
+            json['pending_tasks'] ??
+            json['pendingTasks'] ??
+            tasks.length,
+      ),
+      nextClassName:
+          (json['next_class_name'] ?? json['nextClassName'])?.toString(),
+      nextClassSubtitle:
+          (json['next_class_subtitle'] ?? json['nextClassSubtitle'])
+              ?.toString(),
+    );
+  }
+}
+
+class DashboardUpcomingBlockDto {
+  const DashboardUpcomingBlockDto({
+    required this.id,
+    required this.startsAt,
+    required this.endsAt,
+    required this.title,
+    required this.priority,
+  });
+
+  final String id;
+  final DateTime? startsAt;
+  final DateTime? endsAt;
+  final String title;
+  final String priority;
+
+  factory DashboardUpcomingBlockDto.fromJson(Map<String, dynamic> json) {
+    final task = Map<String, dynamic>.from(
+      (json['task'] as Map?) ?? const <String, dynamic>{},
+    );
+    final startsAtRaw =
+        json['starts_at'] ?? json['startsAt'] ?? json['reminder_at'];
+    final endsAtRaw = json['ends_at'] ?? json['endsAt'];
+    final title =
+        (task['title'] ?? json['title'] ?? 'Untitled task').toString();
+    final id =
+        (json['id'] ??
+                json['block_id'] ??
+                json['blockId'] ??
+                task['id'] ??
+                startsAtRaw ??
+                '')
+            .toString();
+
+    return DashboardUpcomingBlockDto(
+      id: id.isEmpty ? 'upcoming-${startsAtRaw ?? title}' : id,
+      startsAt: DateTime.tryParse('${startsAtRaw ?? ''}'),
+      endsAt: DateTime.tryParse('${endsAtRaw ?? ''}'),
+      title: title,
+      priority:
+          (task['priority'] ??
+                  task['priority_level'] ??
+                  task['priorityLevel'] ??
+                  json['priority'] ??
+                  'Normal')
+              .toString(),
+    );
+  }
+}
+
+class FocusSessionResult {
+  const FocusSessionResult({
+    required this.streakCount,
+    required this.longestStreak,
+    this.sessionId,
+  });
+
+  final int streakCount;
+  final int longestStreak;
+  final String? sessionId;
+
+  factory FocusSessionResult.fromJson(Map<String, dynamic> json) {
+    final focusSession =
+        json['focusSession'] as Map<String, dynamic>? ??
+        const <String, dynamic>{};
+
+    return FocusSessionResult(
+      streakCount: _dashboardInt(
+        json['streakCount'] ??
+            json['streak_count'] ??
+            focusSession['streakCount'] ??
+            focusSession['streak_count'],
+      ),
+      longestStreak: _dashboardInt(
+        json['longestStreak'] ??
+            json['longest_streak'] ??
+            focusSession['longestStreak'] ??
+            focusSession['longest_streak'],
+      ),
+      sessionId:
+          (focusSession['sessionId'] ?? focusSession['session_id'])?.toString(),
+    );
+  }
+}
+
+int _dashboardInt(Object? value) {
+  if (value is int) {
+    return value;
+  }
+
+  if (value is num) {
+    return value.toInt();
+  }
+
+  return int.tryParse('${value ?? ''}') ?? 0;
+}
+
 class ApiService {
   factory ApiService({FlutterSecureStorage? storage}) {
     if (storage != null) {
@@ -175,6 +317,36 @@ class ApiService {
     return response;
   }
 
+  Future<FocusSessionResult> completeFocusSession({
+    required int durationMinutes,
+    int xp = 0,
+  }) async {
+    final headers = await _getHeaders();
+    final uri = Uri.parse('$baseUrl/focus/complete');
+    final body = jsonEncode({'durationMinutes': durationMinutes, 'xp': xp});
+
+    var response = await http
+        .post(uri, headers: headers, body: body)
+        .timeout(const Duration(seconds: 8));
+
+    if (response.statusCode == 401) {
+      final refreshedToken = await _getValidAccessToken(forceRefresh: true);
+      response = await http
+          .post(uri, headers: _jsonHeaders(token: refreshedToken), body: body)
+          .timeout(const Duration(seconds: 8));
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        'Focus session complete failed: ${response.statusCode} ${response.body}',
+      );
+    }
+
+    return FocusSessionResult.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
+  }
+
   Future<AnalyticsModel> fetchAnalyticsOverview() async {
     final headers = await _getHeaders();
     final url = '$baseUrl/analytics/overview';
@@ -212,6 +384,38 @@ class ApiService {
     );
     final decoded = jsonDecode(response.body) as Map<String, dynamic>;
     return AnalyticsModel.fromJson(decoded);
+  }
+
+  Future<DashboardSummaryDto> fetchDashboardSummary() async {
+    final headers = await _getHeaders();
+    final url = '$baseUrl/analytics/overview';
+    _logFetch(url);
+    var response = await http
+        .get(Uri.parse(url), headers: headers)
+        .timeout(const Duration(seconds: 15));
+
+    if (response.statusCode == 401) {
+      final refreshedToken = await _getValidAccessToken(forceRefresh: true);
+      response = await http
+          .get(
+            Uri.parse(url),
+            headers: {
+              'Content-Type': 'application/json',
+              if (refreshedToken != null)
+                'Authorization': 'Bearer $refreshedToken',
+            },
+          )
+          .timeout(const Duration(seconds: 15));
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        'Dashboard summary fetch failed: ${response.statusCode} ${response.body}',
+      );
+    }
+
+    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    return DashboardSummaryDto.fromJson(decoded);
   }
 
   Future<int> calculateCurrentStreak() async {
@@ -725,7 +929,6 @@ class ApiService {
     }
 
     final decoded = jsonDecode(response.body) as Map<String, dynamic>;
-    notifyTaskMutation();
     return decoded;
   }
 
@@ -824,29 +1027,22 @@ class ApiService {
 
   Future<void> deleteTask(String id) async {
     final headers = await _getHeaders();
-    final body = {
-      'subTaskIds': [id],
-    };
+    final uri = Uri.parse('$baseUrl/tasks/$id');
 
     var response = await http
-        .delete(
-          Uri.parse('$baseUrl/tasks/session'),
-          headers: headers,
-          body: jsonEncode(body),
-        )
+        .delete(uri, headers: headers)
         .timeout(const Duration(seconds: 8));
 
     if (response.statusCode == 401) {
       final refreshedToken = await _getValidAccessToken(forceRefresh: true);
       response = await http
           .delete(
-            Uri.parse('$baseUrl/tasks/session'),
+            uri,
             headers: {
               'Content-Type': 'application/json',
               if (refreshedToken != null)
                 'Authorization': 'Bearer $refreshedToken',
             },
-            body: jsonEncode(body),
           )
           .timeout(const Duration(seconds: 8));
     }
@@ -1207,6 +1403,40 @@ class ApiService {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception(
         'Fixed class save failed: ${response.statusCode} ${response.body}',
+      );
+    }
+  }
+
+  Future<void> deleteClass(String classId) async {
+    final normalizedClassId = classId.trim();
+    if (normalizedClassId.isEmpty) {
+      throw ArgumentError('classId is required.');
+    }
+
+    final headers = await _getHeaders();
+    final uri = Uri.parse('$baseUrl/calendar/fixed-classes/$normalizedClassId');
+
+    var response = await http
+        .delete(uri, headers: headers)
+        .timeout(const Duration(seconds: 5));
+
+    if (response.statusCode == 401) {
+      final refreshedToken = await _getValidAccessToken(forceRefresh: true);
+      response = await http
+          .delete(
+            uri,
+            headers: {
+              'Content-Type': 'application/json',
+              if (refreshedToken != null)
+                'Authorization': 'Bearer $refreshedToken',
+            },
+          )
+          .timeout(const Duration(seconds: 5));
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        'Fixed class delete failed: ${response.statusCode} ${response.body}',
       );
     }
   }

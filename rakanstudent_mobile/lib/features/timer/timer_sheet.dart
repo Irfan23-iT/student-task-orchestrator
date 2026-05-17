@@ -13,19 +13,65 @@ class TimerSheet extends StatefulWidget {
   State<TimerSheet> createState() => _TimerSheetState();
 }
 
-class _TimerSheetState extends State<TimerSheet> {
+class _TimerSheetState extends State<TimerSheet> with WidgetsBindingObserver {
   static const int _initialTime = 1500;
 
   int _timeLeft = _initialTime;
   Timer? _timer;
   bool _isRunning = false;
+  bool _wasRunningInBackground = false;
+  DateTime? _backgroundedAt;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     if (widget.enableCodexTimerTest) {
       _runCodexTimerTest();
     }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden) {
+      if (_isRunning) {
+        _backgroundedAt = DateTime.now();
+        _wasRunningInBackground = true;
+        _timer?.cancel();
+        _timer = null;
+      }
+      return;
+    }
+
+    if (state != AppLifecycleState.resumed || !_wasRunningInBackground) {
+      return;
+    }
+
+    final backgroundedAt = _backgroundedAt;
+    _backgroundedAt = null;
+    _wasRunningInBackground = false;
+    if (backgroundedAt == null) {
+      _startTimer();
+      return;
+    }
+
+    final adjustedTimeLeft =
+        _timeLeft - DateTime.now().difference(backgroundedAt).inSeconds;
+    if (adjustedTimeLeft <= 0) {
+      setState(() {
+        _timeLeft = 0;
+        _isRunning = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _timeLeft = adjustedTimeLeft;
+      _isRunning = false;
+    });
+    _startTimer();
   }
 
   Future<void> _runCodexTimerTest() async {
@@ -62,6 +108,8 @@ class _TimerSheetState extends State<TimerSheet> {
     setState(() {
       _isRunning = true;
     });
+    _backgroundedAt = null;
+    _wasRunningInBackground = false;
 
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) {
@@ -83,6 +131,8 @@ class _TimerSheetState extends State<TimerSheet> {
   void _pauseTimer() {
     _timer?.cancel();
     _timer = null;
+    _backgroundedAt = null;
+    _wasRunningInBackground = false;
 
     if (!mounted) {
       return;
@@ -96,6 +146,8 @@ class _TimerSheetState extends State<TimerSheet> {
   void _resetTimer() {
     _timer?.cancel();
     _timer = null;
+    _backgroundedAt = null;
+    _wasRunningInBackground = false;
 
     if (!mounted) {
       return;
@@ -115,6 +167,7 @@ class _TimerSheetState extends State<TimerSheet> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
     super.dispose();
   }

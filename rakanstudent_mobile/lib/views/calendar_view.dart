@@ -381,9 +381,9 @@ class _CalendarViewState extends State<CalendarView> {
     return 'image/jpeg';
   }
 
-  void _showScanningDialog() {
+  void _showScanningDialog(BuildContext dialogContext) {
     showDialog<void>(
-      context: context,
+      context: dialogContext,
       barrierDismissible: false,
       builder:
           (context) => const AlertDialog(
@@ -402,8 +402,8 @@ class _CalendarViewState extends State<CalendarView> {
     );
   }
 
-  void _dismissScanningDialog() {
-    Navigator.of(context, rootNavigator: true).pop();
+  void _dismissScanningDialog(NavigatorState navigator) {
+    navigator.pop();
   }
 
   Future<void> _refreshCalendarAfterScan() async {
@@ -419,6 +419,9 @@ class _CalendarViewState extends State<CalendarView> {
     if (_isScanning) {
       return;
     }
+
+    final messenger = ScaffoldMessenger.of(context);
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
 
     setState(() {
       _isScanning = true;
@@ -441,7 +444,7 @@ class _CalendarViewState extends State<CalendarView> {
       final bytes = await image.readAsBytes();
       if (bytes.lengthInBytes > _maxImageBytes) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           const SnackBar(
             content: Text('Image is still over 1 MB. Please retake it closer.'),
           ),
@@ -450,24 +453,27 @@ class _CalendarViewState extends State<CalendarView> {
       }
 
       if (!mounted) return;
-      _showScanningDialog();
+      _showScanningDialog(rootNavigator.context);
       dialogOpen = true;
 
       final response = await _apiService.scanImageForTasks(
         imageBase64: base64Encode(bytes),
         mimeType: _mimeTypeForImage(image),
       );
+      final createdItems = response['created'] as List<dynamic>? ?? const [];
+      if (createdItems.isNotEmpty) {
+        ApiService.notifyTaskMutation();
+      }
 
       if (!mounted) return;
       if (dialogOpen) {
-        _dismissScanningDialog();
+        _dismissScanningDialog(rootNavigator);
         dialogOpen = false;
       }
       await _refreshCalendarAfterScan();
       if (!mounted) return;
 
-      final createdItems = response['created'] as List<dynamic>? ?? const [];
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
           content: Text(
             createdItems.isEmpty
@@ -478,12 +484,12 @@ class _CalendarViewState extends State<CalendarView> {
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Unable to scan image: $error')));
+      messenger.showSnackBar(
+        SnackBar(content: Text('Unable to scan image: $error')),
+      );
     } finally {
       if (dialogOpen && mounted) {
-        _dismissScanningDialog();
+        _dismissScanningDialog(rootNavigator);
       }
       if (mounted) {
         setState(() {

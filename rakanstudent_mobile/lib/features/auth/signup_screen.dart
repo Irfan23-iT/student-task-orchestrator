@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../app/theme/app_theme.dart';
+import 'login_screen.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -54,15 +55,40 @@ class _SignUpScreenState extends State<SignUpScreen> {
         return;
       }
 
-      Navigator.pop(context, true);
+      _emailController.clear();
+      _passwordController.clear();
+      _confirmPasswordController.clear();
+
+      final colorScheme = Theme.of(context).colorScheme;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Account created successfully! You are now registered.',
+            style: TextStyle(color: colorScheme.onTertiary),
+          ),
+          backgroundColor: colorScheme.tertiary,
+        ),
+      );
+
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute<void>(builder: (context) => const LoginScreen()),
+        (route) => false,
+      );
     } on AuthException catch (error) {
       if (!mounted) {
         return;
       }
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
+      final colorScheme = Theme.of(context).colorScheme;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error.message,
+            style: TextStyle(color: colorScheme.onError),
+          ),
+          backgroundColor: colorScheme.error,
+        ),
+      );
     } catch (_) {
       if (!mounted) {
         return;

@@ -183,6 +183,15 @@ test('createVisionParseResponse writes vision actions to primary_tasks and sub_t
           return this;
         },
         select() {
+          if (this.table === 'tasks') {
+            return Promise.resolve({
+              data: this.payload.map((row, index) => ({
+                id: `task-${inserts.length}-${index}`,
+                ...row,
+              })),
+              error: null,
+            });
+          }
           if (this.table === 'sub_tasks') {
             return Promise.resolve({
               data: this.payload.map((row, index) => ({
@@ -213,10 +222,28 @@ test('createVisionParseResponse writes vision actions to primary_tasks and sub_t
     db,
     userId: 'user-1',
     generateText: async () =>
-      [
-        'ACTION: {"type":"CREATE_TASK","data":{"title":"Read Chapter 4","due_date":"2026-05-12","priority":"Medium","task_type":"assignment"}}',
-        'ACTION: {"type":"CREATE_PRIMARY_TASK","data":{"title":"Research paper","due_date":"2026-05-30","task_type":"assignment","sub_tasks":[{"title":"Outline paper","due_date":"2026-05-15"},{"title":"Submit final paper","due_date":"2026-05-30"}]}}',
-      ].join('\n'),
+      JSON.stringify({
+        tasks: [
+          {
+            title: 'Read Chapter 4',
+            description: null,
+            due_date: '2026-05-12',
+            priority_level: 'Medium',
+            status: 'pending',
+            task_type: 'assignment',
+            notes: null,
+          },
+          {
+            title: 'Submit final paper',
+            description: 'Research paper',
+            due_date: '2026-05-30',
+            priority_level: 'High',
+            status: 'pending',
+            task_type: 'assignment',
+            notes: null,
+          },
+        ],
+      }),
   });
 
   assert.equal(payload.actionsParsed, 2);
@@ -231,8 +258,23 @@ test('createVisionParseResponse writes vision actions to primary_tasks and sub_t
     task_type: 'assignment',
     total_subtasks: 1,
   });
-  assert.equal(inserts[1].table, 'sub_tasks');
+  assert.equal(inserts[1].table, 'tasks');
   assert.deepEqual(inserts[1].payload, [
+    {
+      user_id: 'user-1',
+      title: 'Read Chapter 4',
+      description: null,
+      due_date: '2026-05-12',
+      priority_level: 'Medium',
+      status: 'pending',
+      task_type: 'assignment',
+      notes: 'Created from camera scan.',
+    },
+  ]);
+  assert.equal(payload.created[0].tasks[0].id, 'task-2-0');
+  assert.equal(payload.tasks[0].id, 'task-2-0');
+  assert.equal(inserts[2].table, 'sub_tasks');
+  assert.deepEqual(inserts[2].payload, [
     {
       primary_task_id: 'primary-1',
       user_id: 'user-1',
@@ -240,9 +282,131 @@ test('createVisionParseResponse writes vision actions to primary_tasks and sub_t
       due_date: '2026-05-12',
     },
   ]);
-  assert.equal(inserts[3].payload[0].primary_task_id, 'primary-2');
-  assert.equal(inserts[3].payload[1].title, 'Submit final paper');
-  assert.equal(inserts[2].payload.task_type, 'assignment');
+  assert.equal(inserts[3].table, 'primary_tasks');
+  assert.equal(inserts[3].payload.task_type, 'assignment');
+  assert.equal(inserts[4].table, 'tasks');
+  assert.equal(inserts[4].payload[0].title, 'Submit final paper');
+  assert.equal(inserts[5].table, 'sub_tasks');
+  assert.equal(inserts[5].payload[0].primary_task_id, 'primary-2');
+  assert.equal(inserts[5].payload[0].title, 'Submit final paper');
+});
+
+test('createVisionParseResponse returns 400-class errors for malformed vision JSON', async () => {
+  const db = {
+    from() {
+      throw new Error('should not touch database');
+    },
+  };
+
+  await assert.rejects(
+    () =>
+      createVisionParseResponse({
+        imageBase64: 'ZmFrZQ==',
+        mimeType: 'image/jpeg',
+        db,
+        userId: 'user-1',
+        generateText: async () => 'ACTION: {"type":"CREATE_TASK"}',
+      }),
+    (error) => {
+      assert.equal(error.statusCode, 400);
+      assert.match(error.message, /malformed JSON|must be an object/);
+      return true;
+    },
+  );
+});
+
+test('createVisionParseResponse deduplicates exact task titles on the same due date', async () => {
+  const inserts = [];
+  const db = {
+    from(table) {
+      return {
+        insert(payload) {
+          inserts.push({ table, payload });
+          this.table = table;
+          this.payload = payload;
+          return this;
+        },
+        select() {
+          if (this.table === 'tasks') {
+            return Promise.resolve({
+              data: this.payload.map((row, index) => ({
+                id: `task-${inserts.length}-${index}`,
+                ...row,
+              })),
+              error: null,
+            });
+          }
+          if (this.table === 'sub_tasks') {
+            return Promise.resolve({
+              data: this.payload.map((row, index) => ({
+                id: `sub-${inserts.length}-${index}`,
+                ...row,
+              })),
+              error: null,
+            });
+          }
+          return this;
+        },
+        single() {
+          return Promise.resolve({
+            data: {
+              id: `primary-${inserts.filter((entry) => entry.table === 'primary_tasks').length}`,
+              ...this.payload,
+            },
+            error: null,
+          });
+        },
+      };
+    },
+  };
+
+  const payload = await createVisionParseResponse({
+    imageBase64: 'ZmFrZQ==',
+    mimeType: 'image/jpeg',
+    db,
+    userId: 'user-1',
+    generateText: async () =>
+      JSON.stringify({
+        tasks: [
+          {
+            title: 'Daily Exercise',
+            description: null,
+            due_date: '2026-05-18',
+            priority_level: 'Medium',
+            status: 'pending',
+            task_type: 'general',
+            notes: null,
+          },
+          {
+            title: 'Daily Exercise',
+            description: 'Second mention in the same day',
+            due_date: '2026-05-18',
+            priority_level: 'Medium',
+            status: 'pending',
+            task_type: 'general',
+            notes: null,
+          },
+          {
+            title: 'Daily Exercise',
+            description: null,
+            due_date: '2026-05-19',
+            priority_level: 'Medium',
+            status: 'pending',
+            task_type: 'general',
+            notes: null,
+          },
+        ],
+      }),
+  });
+
+  const taskInserts = inserts.filter((entry) => entry.table === 'tasks');
+
+  assert.equal(payload.actionsParsed, 2);
+  assert.equal(taskInserts.length, 2);
+  assert.equal(taskInserts[0].payload[0].title, 'Daily Exercise');
+  assert.equal(taskInserts[0].payload[0].due_date, '2026-05-18');
+  assert.equal(taskInserts[1].payload[0].title, 'Daily Exercise');
+  assert.equal(taskInserts[1].payload[0].due_date, '2026-05-19');
 });
 
 test('chatWithAi queries tasks through the request-scoped Supabase client and falls back without an API key', async () => {

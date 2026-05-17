@@ -52,6 +52,7 @@ class _SprintGameScreenState extends State<SprintGameScreen> {
   @override
   void dispose() {
     _gameTimer?.cancel();
+    _gameTimer = null;
     super.dispose();
   }
 
@@ -250,7 +251,13 @@ class _SprintGameScreenState extends State<SprintGameScreen> {
                         child: OutlinedButton(
                           onPressed: () {
                             Navigator.of(dialogContext).pop();
-                            _resetGame();
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (!mounted) {
+                                return;
+                              }
+
+                              _resetGame();
+                            });
                           },
                           style: OutlinedButton.styleFrom(
                             foregroundColor: Colors.white,
@@ -294,7 +301,9 @@ class _SprintGameScreenState extends State<SprintGameScreen> {
       },
     );
 
-    _gameOverDialogVisible = false;
+    if (mounted) {
+      _gameOverDialogVisible = false;
+    }
   }
 
   Widget _buildHud(BuildContext context) {

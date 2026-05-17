@@ -158,6 +158,11 @@ class _TasksViewState extends State<TasksView> {
     }
 
     final reminderAtIso = reminderAt.toUtc().toIso8601String();
+    final messenger = ScaffoldMessenger.of(context);
+    final reminderDateLabel = MaterialLocalizations.of(
+      context,
+    ).formatShortDate(reminderAt);
+    final reminderTimeLabel = selectedTime.format(context);
 
     try {
       await _apiService.createReminder(
@@ -171,28 +176,37 @@ class _TasksViewState extends State<TasksView> {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
           content: Text(
-            'Reminder set for ${selectedTime.format(context)} on '
-            '${MaterialLocalizations.of(context).formatShortDate(reminderAt)}',
+            'Reminder set for $reminderTimeLabel on $reminderDateLabel',
           ),
         ),
       );
     } on SocketException {
-      _showNetworkErrorSnackBar();
+      if (!mounted) {
+        return;
+      }
+
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Cannot reach server right now. Please try again.'),
+        ),
+      );
     } catch (e) {
       if (!mounted) {
         return;
       }
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Unable to set reminder: $e')));
+      messenger.showSnackBar(
+        SnackBar(content: Text('Unable to set reminder: $e')),
+      );
     }
   }
 
   Future<void> _runReminderTest() async {
+    final messenger = ScaffoldMessenger.of(context);
+
     try {
       print('--- CODEX REMINDER TEST START ---');
 
@@ -215,7 +229,15 @@ class _TasksViewState extends State<TasksView> {
 
       print('--- CODEX REMINDER SUCCESS: Reminder created for task ---');
     } on SocketException {
-      _showNetworkErrorSnackBar();
+      if (!mounted) {
+        return;
+      }
+
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Cannot reach server right now. Please try again.'),
+        ),
+      );
     } catch (e) {
       print('--- CODEX REMINDER TEST FAILED: $e ---');
     }
@@ -226,6 +248,7 @@ class _TasksViewState extends State<TasksView> {
     required bool newValue,
   }) async {
     final previousTasks = _tasks;
+    final messenger = ScaffoldMessenger.of(context);
 
     setState(() {
       _tasks = _tasks
@@ -251,7 +274,11 @@ class _TasksViewState extends State<TasksView> {
       setState(() {
         _tasks = previousTasks;
       });
-      _showNetworkErrorSnackBar();
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Cannot reach server right now. Please try again.'),
+        ),
+      );
     } catch (_) {
       if (!mounted) {
         return;
@@ -261,13 +288,15 @@ class _TasksViewState extends State<TasksView> {
         _tasks = previousTasks;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         const SnackBar(content: Text('Unable to update the task right now.')),
       );
     }
   }
 
   Future<bool> _handleTaskSwipe(DismissDirection direction, Task task) async {
+    final messenger = ScaffoldMessenger.of(context);
+
     if (direction == DismissDirection.startToEnd) {
       try {
         await _apiService.updateSubTaskCompletion(id: task.id, completed: true);
@@ -282,19 +311,27 @@ class _TasksViewState extends State<TasksView> {
               .toList(growable: false);
         });
 
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(content: Text('"${task.title}" marked completed.')),
         );
         return true;
       } on SocketException {
-        _showNetworkErrorSnackBar();
+        if (!mounted) {
+          return false;
+        }
+
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('Cannot reach server right now. Please try again.'),
+          ),
+        );
         return false;
       } catch (error) {
         if (!mounted) {
           return false;
         }
 
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(content: Text('Unable to complete task: $error')),
         );
         return false;
@@ -314,58 +351,81 @@ class _TasksViewState extends State<TasksView> {
             .toList(growable: false);
       });
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('"${task.title}" deleted.')));
+      messenger.showSnackBar(
+        SnackBar(content: Text('"${task.title}" deleted.')),
+      );
       return true;
     } on SocketException {
-      _showNetworkErrorSnackBar();
+      if (!mounted) {
+        return false;
+      }
+
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Cannot reach server right now. Please try again.'),
+        ),
+      );
       return false;
     } catch (error) {
       if (!mounted) {
         return false;
       }
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Unable to delete task: $error')));
+      messenger.showSnackBar(
+        SnackBar(content: Text('Unable to delete task: $error')),
+      );
       return false;
     }
   }
 
   Future<void> _deleteAllTasks() async {
+    final messenger = ScaffoldMessenger.of(context);
+
     try {
       await _apiService.deleteAllTasks();
+
+      if (!mounted) {
+        return;
+      }
+
       await _fetchTasks();
 
       if (!mounted) {
         return;
       }
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('All tasks deleted')));
+      messenger.showSnackBar(
+        const SnackBar(content: Text('All tasks deleted')),
+      );
     } on SocketException {
-      _showNetworkErrorSnackBar();
+      if (!mounted) {
+        return;
+      }
+
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Cannot reach server right now. Please try again.'),
+        ),
+      );
     } catch (e) {
       if (!mounted) {
         return;
       }
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Unable to delete tasks: $e')));
+      messenger.showSnackBar(
+        SnackBar(content: Text('Unable to delete tasks: $e')),
+      );
     }
   }
 
   Future<void> _syncTasksToCalendar() async {
+    final messenger = ScaffoldMessenger.of(context);
+
     setState(() {
       _isSyncingCalendar = true;
     });
 
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Syncing...')));
+    messenger.showSnackBar(const SnackBar(content: Text('Syncing...')));
 
     try {
       await _apiService.syncTasksToCalendar();
@@ -374,7 +434,7 @@ class _TasksViewState extends State<TasksView> {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         const SnackBar(content: Text('Tasks pushed to Google Calendar!')),
       );
     } on GoogleAccountNotLinkedException catch (error) {
@@ -382,17 +442,23 @@ class _TasksViewState extends State<TasksView> {
         return;
       }
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
+      messenger.showSnackBar(SnackBar(content: Text(error.message)));
     } on SocketException {
-      _showNetworkErrorSnackBar();
+      if (!mounted) {
+        return;
+      }
+
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Cannot reach server right now. Please try again.'),
+        ),
+      );
     } catch (error) {
       if (!mounted) {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(content: Text('Unable to sync calendar: $error')),
       );
     } finally {
@@ -442,7 +508,10 @@ class _TasksViewState extends State<TasksView> {
   }
 
   Future<void> _openCustomTaskScreen() async {
-    final created = await Navigator.of(context).push<bool>(
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+
+    final created = await navigator.push<bool>(
       MaterialPageRoute(builder: (context) => const AddCustomTaskScreen()),
     );
 
@@ -457,7 +526,6 @@ class _TasksViewState extends State<TasksView> {
         return;
       }
 
-      final messenger = ScaffoldMessenger.of(context);
       messenger.showSnackBar(const SnackBar(content: Text('Task created')));
     }
   }

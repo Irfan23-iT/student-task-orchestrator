@@ -1,4 +1,4 @@
-import { supabase } from '../config/supabase.js';
+import { serviceSupabase, supabase } from '../config/supabase.js';
 import { getSystemReadinessSnapshot } from '../lib/systemReadiness.js';
 
 const DEFAULT_PROFILE_SETTINGS = {
@@ -57,6 +57,11 @@ const toProfileSettingsRow = (userId, settings) => ({
   dinner_start: settings.dinnerStart,
   dinner_end: settings.dinnerEnd,
   transit_buffer_minutes: settings.transitBufferMinutes
+});
+
+const toProfileNameRow = (userId, fullName) => ({
+  user_id: userId,
+  full_name: fullName
 });
 
 const assert = (condition, message, statusCode = 400) => {
@@ -163,20 +168,31 @@ export const upsertProfileSettings = async (req, res) => {
 
     let userData = null;
     if (shouldUpdateName) {
-      const { data, error } = await supabase
-        .from('users')
-        .update({ full_name: profileName })
-        .eq('id', req.user.id)
-        .select('full_name')
-        .single();
+      const [{ data, error }, { data: profileData, error: profileError }] = await Promise.all([
+        serviceSupabase
+        .auth
+        .admin
+        .updateUserById(req.user.id, {
+          user_metadata: {
+            full_name: profileName
+          }
+        }),
+        serviceSupabase
+          .from('user_profiles')
+          .upsert(toProfileNameRow(req.user.id, profileName), { onConflict: 'user_id' })
+          .select('full_name')
+          .single()
+      ]);
 
       if (error) throw error;
-      userData = data;
+      if (profileError) throw profileError;
+      userData = data?.user;
+      userData.publicProfile = profileData;
     }
 
     res.status(200).json({
       storageMode: 'remote',
-      name: userData?.full_name ?? profileName ?? '',
+      name: userData?.publicProfile?.full_name ?? userData?.user_metadata?.full_name ?? profileName ?? '',
       settings: normalizeProfileSettings(settingsData || body || DEFAULT_PROFILE_SETTINGS)
     });
   } catch (error) {
