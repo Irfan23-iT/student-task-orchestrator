@@ -9,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../models/analytics_model.dart';
 import '../../models/class_model.dart';
 import '../../services/api_service.dart';
+import '../focus/focus_view.dart';
 import 'sprint_game_screen.dart';
 
 class DashboardView extends StatefulWidget {
@@ -276,15 +277,6 @@ class _DashboardViewState extends State<DashboardView>
     });
   }
 
-  void _toggleFocusTimer() {
-    if (_isFocusTimerActive) {
-      _pauseFocusTimer();
-      return;
-    }
-
-    _startFocusTimer();
-  }
-
   void _startFocusTimer() {
     if (_secondsRemaining <= 0) {
       setState(() {
@@ -315,19 +307,6 @@ class _DashboardViewState extends State<DashboardView>
         _secondsRemaining--;
       });
     });
-
-    setState(() {});
-  }
-
-  void _pauseFocusTimer() {
-    _timer?.cancel();
-    _timer = null;
-    _backgroundedAt = null;
-    _wasFocusTimerRunningInBackground = false;
-
-    if (!mounted) {
-      return;
-    }
 
     setState(() {});
   }
@@ -491,6 +470,32 @@ class _DashboardViewState extends State<DashboardView>
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Race Complete: Earned $score Focus XP!')),
+    );
+  }
+
+  Future<void> _openDeepWorkRoom() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder:
+            (context) =>
+                FocusView(initialDurationMinutes: _focusDurationMinutes),
+        fullscreenDialog: true,
+      ),
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    SystemChrome.setSystemUIOverlayStyle(
+      SystemUiOverlayStyle(
+        systemNavigationBarColor: Theme.of(context).colorScheme.surface,
+        systemNavigationBarIconBrightness:
+            Theme.of(context).brightness == Brightness.dark
+                ? Brightness.light
+                : Brightness.dark,
+        systemNavigationBarDividerColor: Colors.transparent,
+      ),
     );
   }
 
@@ -973,7 +978,7 @@ class _DashboardViewState extends State<DashboardView>
         }
 
         final summary = snapshot.data!;
-        final pendingTasksValue = summary.pendingTasksCount.toString();
+        final pendingTasksValue = summary.upcomingBlocks.length.toString();
         return buildBentoGrid(
           pendingTasksValue: pendingTasksValue,
           nextClassName: summary.nextClassTitle,
@@ -1187,15 +1192,12 @@ class _DashboardViewState extends State<DashboardView>
                     ),
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     child: Tooltip(
-                      message:
-                          _isFocusTimerActive
-                              ? 'Pause Focus Timer'
-                              : 'Start Focus Timer',
+                      message: 'Open Deep Work Room',
                       child: Material(
                         color: Colors.transparent,
                         child: InkWell(
                           borderRadius: BorderRadius.circular(100),
-                          onTap: _toggleFocusTimer,
+                          onTap: _openDeepWorkRoom,
                           onHighlightChanged: (isPressed) {
                             setState(() {
                               _isFocusCardPressed = isPressed;
@@ -1209,9 +1211,7 @@ class _DashboardViewState extends State<DashboardView>
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Icon(
-                                      _isFocusTimerActive
-                                          ? Icons.pause_rounded
-                                          : Icons.play_arrow_rounded,
+                                      Icons.lock_rounded,
                                       color: Colors.black,
                                       size: 32,
                                     ),

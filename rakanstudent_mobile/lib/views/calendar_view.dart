@@ -743,6 +743,7 @@ class _CalendarViewState extends State<CalendarView> {
       floatingActionButton: Padding(
         padding: const EdgeInsets.only(bottom: 80),
         child: FloatingActionButton(
+          heroTag: 'calendar-scan-schedule-fab',
           tooltip: 'Scan schedule image',
           onPressed: _isScanning ? null : _scanScheduleImage,
           child:

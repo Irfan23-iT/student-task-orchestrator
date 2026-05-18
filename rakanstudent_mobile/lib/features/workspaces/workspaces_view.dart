@@ -286,6 +286,7 @@ class _WorkspacesViewState extends State<WorkspacesView> {
       floatingActionButton: GestureDetector(
         onLongPress: _runWorkspaceCreationTest,
         child: FloatingActionButton(
+          heroTag: 'workspaces-create-fab',
           onPressed: _showWorkspaceDialog,
           child: const Icon(Icons.add),
         ),

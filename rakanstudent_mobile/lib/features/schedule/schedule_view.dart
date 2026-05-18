@@ -339,6 +339,7 @@ class _ScheduleViewState extends State<ScheduleView> {
       floatingActionButton: Padding(
         padding: const EdgeInsets.only(bottom: 80),
         child: FloatingActionButton(
+          heroTag: 'schedule-add-class-fab',
           onPressed: _showAddSubjectSheet,
           backgroundColor: const Color(0xFF111827),
           foregroundColor: Colors.white,

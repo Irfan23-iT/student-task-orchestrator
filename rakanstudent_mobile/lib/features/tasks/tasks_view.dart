@@ -1,5 +1,6 @@
 // ignore_for_file: avoid_print
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -8,6 +9,7 @@ import '../../models/task_model.dart';
 import '../../screens/add_custom_task_screen.dart';
 import '../../services/api_service.dart';
 import '../../services/notification_service.dart';
+import 'voice_capture_widget.dart';
 
 class TasksView extends StatefulWidget {
   const TasksView({super.key, this.refreshSignal = 0});
@@ -137,6 +139,22 @@ class _TasksViewState extends State<TasksView> {
     } catch (e) {
       print('--- CODEX CLEANUP TEST FAILED: $e ---');
     }
+  }
+
+  Future<void> _handleVoiceTaskCreated(AiChatResponse response) async {
+    if (!mounted) {
+      return;
+    }
+
+    await _fetchTasks();
+
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(response.message)));
   }
 
   Future<void> _createReminderForTask(Task task) async {
@@ -778,6 +796,12 @@ class _TasksViewState extends State<TasksView> {
                           ),
                         ),
                       ),
+                    ),
+                    const SizedBox(height: 16),
+                    VoiceCaptureWidget(
+                      onTaskCreated: (response) {
+                        unawaited(_handleVoiceTaskCreated(response));
+                      },
                     ),
                     const SizedBox(height: 16),
                     Row(
