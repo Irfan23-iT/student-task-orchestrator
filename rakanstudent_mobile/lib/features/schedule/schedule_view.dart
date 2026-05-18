@@ -461,6 +461,47 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
     super.dispose();
   }
 
+  TimeOfDay? _parseControllerTime(TextEditingController controller) {
+    final parts = controller.text.trim().split(':');
+    if (parts.length < 2) {
+      return null;
+    }
+
+    final hour = int.tryParse(parts[0]);
+    final minute = int.tryParse(parts[1]);
+    if (hour == null ||
+        minute == null ||
+        hour < 0 ||
+        hour > 23 ||
+        minute < 0 ||
+        minute > 59) {
+      return null;
+    }
+
+    return TimeOfDay(hour: hour, minute: minute);
+  }
+
+  Future<void> _pickTime(TextEditingController controller) async {
+    FocusScope.of(context).unfocus();
+
+    final selectedTime = await showTimePicker(
+      context: context,
+      initialTime: _parseControllerTime(controller) ?? TimeOfDay.now(),
+    );
+
+    if (!mounted || selectedTime == null) {
+      return;
+    }
+
+    final formattedTime =
+        '${selectedTime.hour.toString().padLeft(2, '0')}:'
+        '${selectedTime.minute.toString().padLeft(2, '0')}:00';
+
+    setState(() {
+      controller.text = formattedTime;
+    });
+  }
+
   Future<void> _saveSubject() async {
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
@@ -612,17 +653,23 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
                       const SizedBox(height: 12),
                       TextField(
                         controller: _startTimeController,
+                        readOnly: true,
+                        onTap: () => _pickTime(_startTimeController),
                         decoration: const InputDecoration(
                           labelText: 'Start Time',
-                          hintText: '09:00:00',
+                          hintText: 'Select start time',
+                          suffixIcon: Icon(Icons.schedule_rounded),
                         ),
                       ),
                       const SizedBox(height: 12),
                       TextField(
                         controller: _endTimeController,
+                        readOnly: true,
+                        onTap: () => _pickTime(_endTimeController),
                         decoration: const InputDecoration(
                           labelText: 'End Time',
-                          hintText: '10:00:00',
+                          hintText: 'Select end time',
+                          suffixIcon: Icon(Icons.schedule_rounded),
                         ),
                       ),
                       const SizedBox(height: 16),

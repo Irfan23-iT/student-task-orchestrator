@@ -147,7 +147,7 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(
-          builder: (context, setDialogState) {
+          builder: (dialogContentContext, setDialogState) {
             return AlertDialog(
               title: const Text('Edit Name'),
               content: TextField(
@@ -158,7 +158,9 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
               actions: [
                 TextButton(
                   onPressed:
-                      isSubmitting ? null : () => Navigator.of(context).pop(),
+                      isSubmitting
+                          ? null
+                          : () => Navigator.of(dialogContentContext).pop(),
                   child: const Text('Cancel'),
                 ),
                 FilledButton(
@@ -171,47 +173,68 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
                               return;
                             }
 
-                            final messenger = ScaffoldMessenger.of(context);
-                            final navigator = Navigator.of(context);
-                            var didCloseDialog = false;
+                            FocusManager.instance.primaryFocus?.unfocus();
 
-                            try {
-                              setDialogState(() {
-                                isSubmitting = true;
-                              });
-                              await _apiService.updateProfile(nextName);
+                            setDialogState(() {
+                              isSubmitting = true;
+                            });
 
-                              if (!mounted) {
+                            WidgetsBinding.instance.addPostFrameCallback((
+                              _,
+                            ) async {
+                              if (!mounted || !dialogContentContext.mounted) {
                                 return;
                               }
 
-                              navigator.pop();
-                              didCloseDialog = true;
-
-                              messenger.showSnackBar(
-                                const SnackBar(
-                                  content: Text('Profile name updated'),
-                                ),
+                              final messenger = ScaffoldMessenger.of(
+                                dialogContentContext,
                               );
-                            } catch (e) {
-                              if (!mounted) {
-                                return;
-                              }
+                              final navigator = Navigator.of(
+                                dialogContentContext,
+                              );
+                              var didCloseDialog = false;
 
-                              messenger.showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    'Unable to update profile name: $e',
+                              try {
+                                await _apiService.updateProfile(nextName);
+
+                                if (!mounted ||
+                                    !dialogContentContext.mounted ||
+                                    !navigator.mounted ||
+                                    !messenger.mounted) {
+                                  return;
+                                }
+
+                                navigator.pop();
+                                didCloseDialog = true;
+
+                                messenger.showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Profile name updated'),
                                   ),
-                                ),
-                              );
-                            } finally {
-                              if (!didCloseDialog) {
-                                setDialogState(() {
-                                  isSubmitting = false;
-                                });
+                                );
+                              } catch (e) {
+                                if (!mounted ||
+                                    !dialogContentContext.mounted ||
+                                    !messenger.mounted) {
+                                  return;
+                                }
+
+                                messenger.showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'Unable to update profile name: $e',
+                                    ),
+                                  ),
+                                );
+                              } finally {
+                                if (!didCloseDialog &&
+                                    dialogContentContext.mounted) {
+                                  setDialogState(() {
+                                    isSubmitting = false;
+                                  });
+                                }
                               }
-                            }
+                            });
                           },
                   child: const Text('Save'),
                 ),
