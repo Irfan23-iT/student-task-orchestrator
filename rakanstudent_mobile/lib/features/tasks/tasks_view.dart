@@ -4,14 +4,16 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/task_model.dart';
 import '../../screens/add_custom_task_screen.dart';
 import '../../services/api_service.dart';
 import '../../services/notification_service.dart';
+import '../gacha/gacha_controller.dart';
 import 'voice_capture_widget.dart';
 
-class TasksView extends StatefulWidget {
+class TasksView extends ConsumerStatefulWidget {
   const TasksView({
     super.key,
     this.refreshSignal = 0,
@@ -26,10 +28,10 @@ class TasksView extends StatefulWidget {
   final bool enableCleanupVerification;
 
   @override
-  State<TasksView> createState() => _TasksViewState();
+  ConsumerState<TasksView> createState() => _TasksViewState();
 }
 
-class _TasksViewState extends State<TasksView> {
+class _TasksViewState extends ConsumerState<TasksView> {
   final ApiService _apiService = ApiService();
 
   List<Task> _tasks = const [];
@@ -326,6 +328,22 @@ class _TasksViewState extends State<TasksView> {
         id: task.id,
         completed: newValue,
       );
+
+      ApiService.notifyTaskMutation();
+
+      if (!mounted) {
+        return;
+      }
+
+      if (newValue && !task.isCompleted) {
+        final earnedToken =
+            ref.read(gachaControllerProvider.notifier).incrementTask();
+        if (earnedToken) {
+          messenger.showSnackBar(
+            const SnackBar(content: Text('+1 Gacha Token Earned')),
+          );
+        }
+      }
     } on SocketException {
       if (!mounted) {
         return;
@@ -363,6 +381,18 @@ class _TasksViewState extends State<TasksView> {
 
         if (!mounted) {
           return false;
+        }
+
+        ApiService.notifyTaskMutation();
+
+        if (!task.isCompleted) {
+          final earnedToken =
+              ref.read(gachaControllerProvider.notifier).incrementTask();
+          if (earnedToken) {
+            messenger.showSnackBar(
+              const SnackBar(content: Text('+1 Gacha Token Earned')),
+            );
+          }
         }
 
         setState(() {

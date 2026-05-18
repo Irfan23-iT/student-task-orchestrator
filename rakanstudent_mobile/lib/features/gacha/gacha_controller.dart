@@ -60,14 +60,23 @@ class GachaController extends StateNotifier<GachaState> {
 
   final Random _random;
 
-  void incrementTask() {
+  bool incrementTask() {
     final nextCompletedCount = state.tasksCompletedToday + 1;
     if (nextCompletedCount >= 3) {
       state = state.copyWith(tasksCompletedToday: 0, tokens: state.tokens + 1);
-      return;
+      return true;
     }
 
     state = state.copyWith(tasksCompletedToday: nextCompletedCount);
+    return false;
+  }
+
+  void addTokens(int count) {
+    if (count <= 0) {
+      return;
+    }
+
+    state = state.copyWith(tokens: state.tokens + count);
   }
 
   GachaPrize? pullGacha() {

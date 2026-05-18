@@ -226,11 +226,13 @@ void main() {
 
   testWidgets('Tasks view renders new shell controls', (tester) async {
     await tester.pumpWidget(
-      const MaterialApp(
-        home: TasksView(
-          fetchOnInit: false,
-          enableVoiceCapture: false,
-          enableCleanupVerification: false,
+      const ProviderScope(
+        child: MaterialApp(
+          home: TasksView(
+            fetchOnInit: false,
+            enableVoiceCapture: false,
+            enableCleanupVerification: false,
+          ),
         ),
       ),
     );
@@ -247,11 +249,13 @@ void main() {
 
   testWidgets('Tasks view opens custom task form', (tester) async {
     await tester.pumpWidget(
-      const MaterialApp(
-        home: TasksView(
-          fetchOnInit: false,
-          enableVoiceCapture: false,
-          enableCleanupVerification: false,
+      const ProviderScope(
+        child: MaterialApp(
+          home: TasksView(
+            fetchOnInit: false,
+            enableVoiceCapture: false,
+            enableCleanupVerification: false,
+          ),
         ),
       ),
     );
