@@ -6,7 +6,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme_provider.dart';
-import '../../models/settings_model.dart';
 import '../../services/api_service.dart';
 
 class ProfileView extends ConsumerStatefulWidget {
@@ -18,65 +17,34 @@ class ProfileView extends ConsumerStatefulWidget {
 
 class _ProfileViewState extends ConsumerState<ProfileView> {
   final ApiService _apiService = ApiService();
-  final _wakeTimeController = TextEditingController();
-  final _sleepTimeController = TextEditingController();
 
-  String? _displayName;
-  SettingsModel? _settings;
   bool? _isCalendarConnected;
-  bool _isLoading = true;
-  bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
-    _loadSettings();
+    ApiService.profileNameNotifier.addListener(_handleProfileNameChanged);
     _loadCalendarStatus();
-    _runCodexSettingsTest();
+    _loadProfileName();
   }
 
   @override
   void dispose() {
-    _wakeTimeController.dispose();
-    _sleepTimeController.dispose();
+    ApiService.profileNameNotifier.removeListener(_handleProfileNameChanged);
     super.dispose();
   }
 
-  Future<void> _loadSettings() async {
+  void _handleProfileNameChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  Future<void> _loadProfileName() async {
     try {
-      final settings = await _apiService.fetchProfileSettings();
-
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _settings = settings;
-        _wakeTimeController.text = settings.wakeTime;
-        _sleepTimeController.text = settings.sleepTime;
-        _isLoading = false;
-      });
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _settings = const SettingsModel(
-          wakeTime: '07:00',
-          sleepTime: '23:00',
-          breakfastStart: '07:30',
-          breakfastEnd: '08:30',
-          lunchStart: '12:30',
-          lunchEnd: '13:30',
-          dinnerStart: '19:00',
-          dinnerEnd: '20:00',
-          transitBufferMinutes: 30,
-        );
-        _wakeTimeController.text = _settings!.wakeTime;
-        _sleepTimeController.text = _settings!.sleepTime;
-        _isLoading = false;
-      });
+      await _apiService.fetchCurrentProfileName();
+    } catch (error) {
+      debugPrint('[ProfileView] Profile name fetch failed: $error');
     }
   }
 
@@ -99,18 +67,6 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
       setState(() {
         _isCalendarConnected = false;
       });
-    }
-  }
-
-  Future<void> _runCodexSettingsTest() async {
-    try {
-      print('--- CODEX SETTINGS TEST START ---');
-      final settings = await _apiService.fetchProfileSettings();
-      print(
-        '--- CODEX SETTINGS FETCHED: Wake Time is ${settings.wakeTime} ---',
-      );
-    } catch (e) {
-      print('--- CODEX SETTINGS TEST FAILED: $e ---');
     }
   }
 
@@ -179,76 +135,10 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
     return '${monthNames[parsedDate.month - 1]} ${parsedDate.day}, ${parsedDate.year}';
   }
 
-  Future<void> _saveSettings() async {
-    final currentSettings = _settings;
-    final wakeTime =
-        _wakeTimeController.text.trim().isEmpty
-            ? '07:00'
-            : _wakeTimeController.text.trim();
-    final sleepTime =
-        _sleepTimeController.text.trim().isEmpty
-            ? '23:00'
-            : _sleepTimeController.text.trim();
-
-    if (!mounted) {
-      return;
-    }
-
-    setState(() {
-      _isSaving = true;
-    });
-
-    final messenger = ScaffoldMessenger.of(context);
-
-    try {
-      final updatedSettings = (currentSettings ??
-              const SettingsModel(
-                wakeTime: '07:00',
-                sleepTime: '23:00',
-                breakfastStart: '07:30',
-                breakfastEnd: '08:30',
-                lunchStart: '12:30',
-                lunchEnd: '13:30',
-                dinnerStart: '19:00',
-                dinnerEnd: '20:00',
-                transitBufferMinutes: 30,
-              ))
-          .copyWith(wakeTime: wakeTime, sleepTime: sleepTime);
-
-      await _apiService.updateProfileSettings(updatedSettings);
-
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _settings = updatedSettings;
-      });
-
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Settings Saved Successfully')),
-      );
-    } catch (e) {
-      if (!mounted) {
-        return;
-      }
-
-      messenger.showSnackBar(
-        SnackBar(content: Text('Unable to save settings: $e')),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isSaving = false;
-        });
-      }
-    }
-  }
-
   Future<void> _showEditNameDialog() async {
     final user = _currentUser();
     final controller = TextEditingController(
-      text: _displayName ?? _resolveDisplayName(user),
+      text: ApiService.profileNameNotifier.value ?? _resolveDisplayName(user),
     );
     var isSubmitting = false;
 
@@ -294,9 +184,6 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
                                 return;
                               }
 
-                              setState(() {
-                                _displayName = nextName;
-                              });
                               navigator.pop();
                               didCloseDialog = true;
 
@@ -432,98 +319,60 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
     );
   }
 
-  Widget _buildLabeledTimeRow({required String label, required String value}) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 96,
-            child: Text(
-              label,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: colorScheme.onSurface,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              decoration: BoxDecoration(
-                color: colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.schedule_rounded,
-                    size: 18,
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    value,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final themeMode = ref.watch(themeModeProvider);
     final isDarkMode = themeMode == ThemeMode.dark;
     final user = _currentUser();
     final email = user?.email ?? 'local tester';
-    final displayName = _displayName ?? _resolveDisplayName(user);
+    final profileName = ApiService.profileNameNotifier.value;
+    final displayName =
+        profileName?.trim().isNotEmpty == true
+            ? profileName!.trim()
+            : _resolveDisplayName(user);
     final avatarLetter =
         displayName.isEmpty ? 'U' : displayName.substring(0, 1).toUpperCase();
     final joinedDate = _formatJoinedDate(user?.createdAt);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final calendarConnected = _isCalendarConnected == true;
-    final cardShadow = Colors.black.withValues(
-      alpha: theme.brightness == Brightness.dark ? 0.32 : 0.08,
-    );
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? Colors.black : const Color(0xFFF5F5F7);
+    final cardColor = isDark ? const Color(0xFF1A1A1A) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black;
+    final subTextColor = isDark ? Colors.grey[400] : Colors.grey[600];
+    final shadow =
+        isDark
+            ? <BoxShadow>[]
+            : [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+              ),
+            ];
 
     return Scaffold(
+      backgroundColor: bgColor,
       body: SafeArea(
         bottom: false,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 140),
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 140),
           children: [
             Text(
               'Profile',
               style: theme.textTheme.headlineMedium?.copyWith(
-                color: colorScheme.onSurface,
+                color: textColor,
                 fontWeight: FontWeight.w800,
               ),
             ),
             const SizedBox(height: 20),
             Container(
-              padding: const EdgeInsets.all(18),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: colorScheme.surface,
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: cardShadow,
-                    blurRadius: 18,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
+                color: cardColor,
+                borderRadius: BorderRadius.circular(32),
+                boxShadow: shadow,
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -557,7 +406,7 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                                 style: theme.textTheme.titleLarge?.copyWith(
-                                  color: colorScheme.onSurface,
+                                  color: textColor,
                                   fontWeight: FontWeight.w800,
                                 ),
                               ),
@@ -574,14 +423,14 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
                         Text(
                           email,
                           style: theme.textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
+                            color: subTextColor,
                           ),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           'Joined $joinedDate',
                           style: theme.textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
+                            color: subTextColor,
                           ),
                         ),
                       ],
@@ -592,85 +441,11 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
             ),
             const SizedBox(height: 16),
             Container(
-              padding: const EdgeInsets.all(18),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: colorScheme.surface,
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: cardShadow,
-                    blurRadius: 18,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Sleep Schedule',
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      color: colorScheme.onSurface,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  _buildLabeledTimeRow(
-                    label: 'Wake Time',
-                    value:
-                        _wakeTimeController.text.trim().isEmpty
-                            ? '07:00'
-                            : _wakeTimeController.text.trim(),
-                  ),
-                  _buildLabeledTimeRow(
-                    label: 'Sleep Time',
-                    value:
-                        _sleepTimeController.text.trim().isEmpty
-                            ? '23:00'
-                            : _sleepTimeController.text.trim(),
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: _isSaving ? null : _saveSettings,
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                      ),
-                      child:
-                          _isSaving
-                              ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                              : const Text(
-                                'Save Settings',
-                                style: TextStyle(fontWeight: FontWeight.w800),
-                              ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: colorScheme.surface,
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: cardShadow,
-                    blurRadius: 18,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
+                color: cardColor,
+                borderRadius: BorderRadius.circular(32),
+                boxShadow: shadow,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -678,7 +453,7 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
                   Text(
                     'Integrations',
                     style: theme.textTheme.titleLarge?.copyWith(
-                      color: colorScheme.onSurface,
+                      color: textColor,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
@@ -706,7 +481,7 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
                             Text(
                               'Google Calendar',
                               style: theme.textTheme.titleMedium?.copyWith(
-                                color: colorScheme.onSurface,
+                                color: textColor,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
@@ -714,7 +489,7 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
                             Text(
                               calendarConnected ? 'Connected' : 'Not Connected',
                               style: theme.textTheme.bodyMedium?.copyWith(
-                                color: colorScheme.onSurfaceVariant,
+                                color: subTextColor,
                               ),
                             ),
                           ],
@@ -745,20 +520,19 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
             const SizedBox(height: 16),
             Container(
               decoration: BoxDecoration(
-                color: Theme.of(context).cardColor,
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: cardShadow,
-                    blurRadius: 18,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
+                color: cardColor,
+                borderRadius: BorderRadius.circular(32),
+                boxShadow: shadow,
               ),
               child: SwitchListTile(
                 value: isDarkMode,
-                onChanged:
-                    (_) => ref.read(themeModeProvider.notifier).toggleTheme(),
+                onChanged: (isDarkMode) {
+                  ref
+                      .read(themeModeProvider.notifier)
+                      .setThemeMode(
+                        isDarkMode ? ThemeMode.dark : ThemeMode.light,
+                      );
+                },
                 secondary: Icon(
                   isDarkMode
                       ? Icons.dark_mode_rounded
@@ -768,6 +542,7 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
                 title: Text(
                   isDarkMode ? 'Dark Mode' : 'Light Mode',
                   style: theme.textTheme.titleMedium?.copyWith(
+                    color: textColor,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -775,7 +550,9 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
                   isDarkMode
                       ? 'Midnight neon interface'
                       : 'Bright study interface',
-                  style: theme.textTheme.bodyMedium,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: subTextColor,
+                  ),
                 ),
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 18,
@@ -804,10 +581,6 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
                 ),
               ),
             ),
-            if (_isLoading) ...[
-              const SizedBox(height: 16),
-              const Center(child: CircularProgressIndicator()),
-            ],
           ],
         ),
       ),

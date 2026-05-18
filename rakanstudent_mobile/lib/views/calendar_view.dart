@@ -95,8 +95,10 @@ class _CalendarViewState extends State<CalendarView> {
     required DateTime endDate,
   }) {
     final groupedEvents = <DateTime, List<Object>>{};
+    final dedupedTasks = _dedupeTasks(tasks);
+    final dedupedClasses = _dedupeClassSchedules(classes);
 
-    for (final task in tasks) {
+    for (final task in dedupedTasks) {
       final dueDate = task.dueDate;
       if (dueDate == null) {
         continue;
@@ -111,7 +113,7 @@ class _CalendarViewState extends State<CalendarView> {
       !day.isAfter(_dayKey(endDate));
       day = day.add(const Duration(days: 1))
     ) {
-      for (final classSchedule in classes) {
+      for (final classSchedule in dedupedClasses) {
         if (classSchedule.dayOfWeek == day.weekday) {
           groupedEvents.putIfAbsent(day, () => <Object>[]).add(classSchedule);
         }
@@ -121,10 +123,56 @@ class _CalendarViewState extends State<CalendarView> {
     return groupedEvents;
   }
 
+  List<Task> _dedupeTasks(List<Task> fetchedTasks) {
+    final uniqueTasks = <String, Task>{};
+
+    for (final task in fetchedTasks) {
+      final normalizedTitle = task.title.trim().toLowerCase().replaceAll(
+        RegExp(r'\s+'),
+        ' ',
+      );
+      final dueDate = task.dueDate;
+      final dateKey =
+          dueDate == null
+              ? 'no-date'
+              : '${dueDate.toLocal().year}-${dueDate.toLocal().month}-${dueDate.toLocal().day}';
+      final key = '$normalizedTitle|$dateKey';
+
+      uniqueTasks.putIfAbsent(key, () => task);
+    }
+
+    return uniqueTasks.values.toList(growable: false);
+  }
+
+  List<ClassSchedule> _dedupeClassSchedules(
+    List<ClassSchedule> fetchedClasses,
+  ) {
+    final uniqueClasses = <String, ClassSchedule>{};
+
+    for (final classSchedule in fetchedClasses) {
+      final normalizedId = classSchedule.id.trim();
+      final fallbackKey = [
+        classSchedule.courseName.trim().toLowerCase(),
+        classSchedule.dayOfWeek.toString(),
+        classSchedule.startTime.trim(),
+        classSchedule.endTime.trim(),
+      ].join('|');
+      final key = normalizedId.isEmpty ? fallbackKey : normalizedId;
+
+      uniqueClasses[key] = classSchedule;
+    }
+
+    return uniqueClasses.values.toList(growable: false);
+  }
+
   Future<void> _fetchVisibleMonth({bool showLoading = true}) async {
-    if (showLoading) {
+    if (mounted) {
       setState(() {
-        _isLoading = true;
+        _eventsByDay = const {};
+        _classSchedules = const [];
+        if (showLoading) {
+          _isLoading = true;
+        }
       });
     }
 
@@ -138,16 +186,18 @@ class _CalendarViewState extends State<CalendarView> {
       ]);
       final classRows =
           await AppSupabaseClient.instance.from('fixed_classes').select();
-      final classSchedules = classRows
-          .map(ClassSchedule.fromJson)
-          .toList(growable: false);
-      final tasks = responses
-          .expand((response) => response)
-          .map(Task.fromJson)
-          .where((task) {
-            return task.dueDate != null;
-          })
-          .toList(growable: false);
+      final classSchedules = _dedupeClassSchedules(
+        classRows.map(ClassSchedule.fromJson).toList(growable: false),
+      );
+      final tasks = _dedupeTasks(
+        responses
+            .expand((response) => response)
+            .map(Task.fromJson)
+            .where((task) {
+              return task.dueDate != null;
+            })
+            .toList(growable: false),
+      );
       final groupedEvents = _groupCalendarEvents(
         tasks: tasks,
         classes: classSchedules,
@@ -234,20 +284,28 @@ class _CalendarViewState extends State<CalendarView> {
     final dueDate = task.dueDate;
     final timeLabel =
         dueDate == null ? null : DateFormat('h:mm a').format(dueDate.toLocal());
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardColor = isDark ? const Color(0xFF1A1A1A) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black;
+    final subTextColor = isDark ? Colors.grey[400] : Colors.grey[600];
+    final shadow =
+        isDark
+            ? <BoxShadow>[]
+            : [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+              ),
+            ];
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
-          ),
-        ],
+        color: cardColor,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: shadow,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -269,7 +327,7 @@ class _CalendarViewState extends State<CalendarView> {
                 Text(
                   task.title,
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    color: const Color(0xFF111827),
+                    color: textColor,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -280,7 +338,7 @@ class _CalendarViewState extends State<CalendarView> {
                     if (timeLabel != null) timeLabel,
                   ].join(' | '),
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Colors.grey.shade700,
+                    color: subTextColor,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -294,14 +352,32 @@ class _CalendarViewState extends State<CalendarView> {
 
   Widget _buildClassTile(ClassSchedule classSchedule) {
     final color = _colorFromHex(classSchedule.colorHex);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardColor = isDark ? const Color(0xFF1A1A1A) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black;
+    final subTextColor = isDark ? Colors.grey[400] : Colors.grey[600];
+    final shadow =
+        isDark
+            ? <BoxShadow>[]
+            : [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+              ),
+            ];
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
+        color: Color.alphaBlend(
+          color.withValues(alpha: isDark ? 0.14 : 0.08),
+          cardColor,
+        ),
         border: Border.all(color: color.withValues(alpha: 0.22)),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: shadow,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -320,7 +396,7 @@ class _CalendarViewState extends State<CalendarView> {
                 Text(
                   classSchedule.courseName,
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    color: const Color(0xFF111827),
+                    color: textColor,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -333,7 +409,7 @@ class _CalendarViewState extends State<CalendarView> {
                     _classTimeRange(classSchedule),
                   ].join(' | '),
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Colors.grey.shade800,
+                    color: subTextColor,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -503,21 +579,36 @@ class _CalendarViewState extends State<CalendarView> {
   Widget build(BuildContext context) {
     final selectedEvents = _eventsForDay(_selectedDay);
     final selectedLabel = DateFormat('EEE, MMM d').format(_selectedDay);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? Colors.black : const Color(0xFFF5F5F7);
+    final cardColor = isDark ? const Color(0xFF1A1A1A) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black;
+    final subTextColor = isDark ? Colors.grey[400] : Colors.grey[600];
+    final shadow =
+        isDark
+            ? <BoxShadow>[]
+            : [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+              ),
+            ];
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: bgColor,
       body: SafeArea(
         bottom: false,
         child: RefreshIndicator(
           onRefresh: () => _fetchVisibleMonth(showLoading: false),
           child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 140),
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 140),
             children: [
               Text(
                 'Calendar',
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  color: Colors.black,
+                  color: textColor,
                   fontWeight: FontWeight.w800,
                 ),
               ),
@@ -525,7 +616,7 @@ class _CalendarViewState extends State<CalendarView> {
               Text(
                 'Tasks by due date',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.grey.shade600,
+                  color: subTextColor,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -533,15 +624,9 @@ class _CalendarViewState extends State<CalendarView> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(18),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.08),
-                      blurRadius: 18,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
+                  color: cardColor,
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: shadow,
                 ),
                 child: Stack(
                   children: [
@@ -560,18 +645,27 @@ class _CalendarViewState extends State<CalendarView> {
                         formatButtonVisible: false,
                         titleCentered: true,
                       ),
-                      calendarStyle: const CalendarStyle(
-                        todayDecoration: BoxDecoration(
+                      calendarStyle: CalendarStyle(
+                        defaultTextStyle: TextStyle(color: textColor),
+                        weekendTextStyle: TextStyle(color: textColor),
+                        outsideTextStyle: TextStyle(
+                          color: subTextColor ?? Colors.grey,
+                        ),
+                        todayDecoration: const BoxDecoration(
                           color: Color(0xFFEDE9FE),
                           shape: BoxShape.circle,
                         ),
-                        todayTextStyle: TextStyle(
+                        todayTextStyle: const TextStyle(
                           color: Color(0xFF111827),
                           fontWeight: FontWeight.w800,
                         ),
-                        selectedDecoration: BoxDecoration(
+                        selectedDecoration: const BoxDecoration(
                           color: Color(0xFF111827),
                           shape: BoxShape.circle,
+                        ),
+                        selectedTextStyle: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
                       calendarBuilders: CalendarBuilders<Object>(
@@ -624,7 +718,7 @@ class _CalendarViewState extends State<CalendarView> {
               Text(
                 selectedLabel,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: const Color(0xFF111827),
+                  color: textColor,
                   fontWeight: FontWeight.w800,
                 ),
               ),
@@ -635,9 +729,9 @@ class _CalendarViewState extends State<CalendarView> {
                   child: Text(
                     'No tasks or classes on this date.',
                     textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.grey.shade600,
-                    ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodyMedium?.copyWith(color: subTextColor),
                   ),
                 )
               else

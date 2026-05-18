@@ -98,13 +98,14 @@ test('upsertProfileSettings updates auth metadata and public profile when Flutte
   assert.deepEqual(
     calls.find((call) => call.upsert)?.upsert,
     {
+      id: 'user-1',
       user_id: 'user-1',
       full_name: 'Ada Student'
     }
   );
   assert.deepEqual(
     calls.find((call) => call.upsert)?.options,
-    { onConflict: 'user_id' }
+    { onConflict: 'id' }
   );
   assert.equal(calls.some((call) => call.table === 'users'), false);
 });

@@ -67,9 +67,18 @@ class _TasksViewState extends State<TasksView> {
   }
 
   Future<void> _fetchTasks() async {
+    if (mounted) {
+      setState(() {
+        _tasks = const [];
+        _isLoading = true;
+      });
+    }
+
     try {
       final response = await _apiService.getTasks();
-      final tasks = response.map(Task.fromJson).toList(growable: false);
+      final tasks = _dedupeTasks(
+        response.map(Task.fromJson).toList(growable: false),
+      );
       await NotificationService.instance.scheduleTaskReminders(tasks);
 
       if (!mounted) {
@@ -100,6 +109,24 @@ class _TasksViewState extends State<TasksView> {
         _isLoading = false;
       });
     }
+  }
+
+  List<Task> _dedupeTasks(List<Task> fetchedTasks) {
+    final uniqueTasks = <String, Task>{};
+
+    for (final task in fetchedTasks) {
+      final normalizedId = task.id.trim();
+      final fallbackKey = [
+        task.title.trim().toLowerCase(),
+        task.dueDate?.toUtc().toIso8601String() ?? '',
+        task.createdAt.toUtc().toIso8601String(),
+      ].join('|');
+      final key = normalizedId.isEmpty ? fallbackKey : normalizedId;
+
+      uniqueTasks[key] = task;
+    }
+
+    return uniqueTasks.values.toList(growable: false);
   }
 
   Future<void> _runCleanupVerification() async {
@@ -563,18 +590,26 @@ class _TasksViewState extends State<TasksView> {
   }
 
   Widget _buildTaskCard(BuildContext context, Task task) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardColor = isDark ? const Color(0xFF1A1A1A) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black;
+    final shadow =
+        isDark
+            ? <BoxShadow>[]
+            : [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+              ),
+            ];
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        color: cardColor,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: shadow,
       ),
       child: Dismissible(
         key: Key(task.id),
@@ -583,7 +618,7 @@ class _TasksViewState extends State<TasksView> {
           margin: const EdgeInsets.symmetric(vertical: 2),
           decoration: BoxDecoration(
             color: Colors.green.shade600,
-            borderRadius: BorderRadius.circular(22),
+            borderRadius: BorderRadius.circular(24),
           ),
           alignment: Alignment.centerLeft,
           padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -593,7 +628,7 @@ class _TasksViewState extends State<TasksView> {
           margin: const EdgeInsets.symmetric(vertical: 2),
           decoration: BoxDecoration(
             color: Colors.red,
-            borderRadius: BorderRadius.circular(22),
+            borderRadius: BorderRadius.circular(24),
           ),
           alignment: Alignment.centerRight,
           padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -601,7 +636,7 @@ class _TasksViewState extends State<TasksView> {
         ),
         confirmDismiss: (direction) => _handleTaskSwipe(direction, task),
         child: Padding(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(20),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -626,7 +661,7 @@ class _TasksViewState extends State<TasksView> {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: Colors.black,
+                        color: textColor,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
@@ -673,21 +708,36 @@ class _TasksViewState extends State<TasksView> {
   @override
   Widget build(BuildContext context) {
     final remainingTasks = _remainingTasksCount;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? Colors.black : const Color(0xFFF5F5F7);
+    final cardColor = isDark ? const Color(0xFF1A1A1A) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black;
+    final subTextColor = isDark ? Colors.grey[400] : Colors.grey[600];
+    final shadow =
+        isDark
+            ? <BoxShadow>[]
+            : [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+              ),
+            ];
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: bgColor,
       body: SafeArea(
         bottom: false,
         child: RefreshIndicator(
           onRefresh: _fetchTasks,
           child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 140),
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 140),
             children: [
               Text(
                 'Tasks',
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  color: Colors.black,
+                  color: textColor,
                   fontWeight: FontWeight.w800,
                 ),
               ),
@@ -695,78 +745,92 @@ class _TasksViewState extends State<TasksView> {
               Text(
                 '$remainingTasks tasks remaining',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.grey.shade600,
+                  color: subTextColor,
                   fontWeight: FontWeight.w500,
                 ),
               ),
               const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: _openCustomTaskScreen,
-                  icon: const Icon(Icons.add_task_rounded),
-                  label: const Text('Add Custom Task'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF111827),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    textStyle: const TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 15,
-                    ),
-                  ),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: cardColor,
+                  borderRadius: BorderRadius.circular(32),
+                  boxShadow: shadow,
                 ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed:
-                          _isSyncingCalendar ? null : _syncTasksToCalendar,
-                      icon:
-                          _isSyncingCalendar
-                              ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                              : const Icon(Icons.sync_rounded),
-                      label: const Text('Sync to Calendar'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFF7C3AED),
-                        backgroundColor: const Color(0xFFF3E8FF),
-                        side: BorderSide.none,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(999),
+                child: Column(
+                  children: [
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: _openCustomTaskScreen,
+                        icon: const Icon(Icons.add_task_rounded),
+                        label: const Text('Add Custom Task'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF111827),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          textStyle: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 15,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _deleteAllTasks,
-                      icon: const Icon(Icons.delete_sweep_rounded),
-                      label: const Text('Delete All'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFFDC2626),
-                        backgroundColor: const Color(0xFFFEE2E2),
-                        side: BorderSide.none,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(999),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed:
+                                _isSyncingCalendar
+                                    ? null
+                                    : _syncTasksToCalendar,
+                            icon:
+                                _isSyncingCalendar
+                                    ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                    : const Icon(Icons.sync_rounded),
+                            label: const Text('Sync to Calendar'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFF7C3AED),
+                              backgroundColor: const Color(0xFFF3E8FF),
+                              side: BorderSide.none,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _deleteAllTasks,
+                            icon: const Icon(Icons.delete_sweep_rounded),
+                            label: const Text('Delete All'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFFDC2626),
+                              backgroundColor: const Color(0xFFFEE2E2),
+                              side: BorderSide.none,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               const SizedBox(height: 18),
               if (_isLoading)
@@ -780,9 +844,9 @@ class _TasksViewState extends State<TasksView> {
                   child: Text(
                     'No tasks yet.',
                     textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.grey.shade600,
-                    ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodyMedium?.copyWith(color: subTextColor),
                   ),
                 )
               else

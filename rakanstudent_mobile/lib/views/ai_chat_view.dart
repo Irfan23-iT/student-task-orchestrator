@@ -107,8 +107,19 @@ class _AiChatViewState extends State<AiChatView> {
     final theme = Theme.of(context);
     final alignment =
         message.isUser ? Alignment.centerRight : Alignment.centerLeft;
-    final background = message.isUser ? const Color(0xFF111827) : Colors.white;
-    final foreground = message.isUser ? Colors.white : const Color(0xFF111827);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardColor = isDark ? const Color(0xFF1A1A1A) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black;
+    final shadow =
+        isDark
+            ? <BoxShadow>[]
+            : [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+              ),
+            ];
 
     return Align(
       alignment: alignment,
@@ -118,25 +129,25 @@ class _AiChatViewState extends State<AiChatView> {
           margin: const EdgeInsets.symmetric(vertical: 6),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            color: background,
+            color: message.isUser ? null : cardColor,
+            gradient:
+                message.isUser
+                    ? const LinearGradient(
+                      colors: [Color(0xFF20E3B2), Color(0xFF00A3FF)],
+                    )
+                    : null,
             borderRadius: BorderRadius.only(
               topLeft: const Radius.circular(18),
               topRight: const Radius.circular(18),
               bottomLeft: Radius.circular(message.isUser ? 18 : 4),
               bottomRight: Radius.circular(message.isUser ? 4 : 18),
             ),
-            boxShadow: const [
-              BoxShadow(
-                color: Colors.black12,
-                blurRadius: 10,
-                offset: Offset(0, 4),
-              ),
-            ],
+            boxShadow: shadow,
           ),
           child: Text(
             message.text,
             style: theme.textTheme.bodyMedium?.copyWith(
-              color: foreground,
+              color: message.isUser ? Colors.black : textColor,
               height: 1.35,
             ),
           ),
@@ -148,12 +159,27 @@ class _AiChatViewState extends State<AiChatView> {
   @override
   Widget build(BuildContext context) {
     final bottomPadding = MediaQuery.of(context).padding.bottom;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? Colors.black : const Color(0xFFF5F5F7);
+    final cardColor = isDark ? const Color(0xFF1A1A1A) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black;
+    final subTextColor = isDark ? Colors.grey[400] : Colors.grey[600];
+    final shadow =
+        isDark
+            ? <BoxShadow>[]
+            : [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+              ),
+            ];
 
-    return Material(
-      color: Colors.transparent,
-      child: SafeArea(
+    return Scaffold(
+      backgroundColor: bgColor,
+      body: SafeArea(
         child: Padding(
-          padding: EdgeInsets.fromLTRB(20, 18, 20, 92 + bottomPadding),
+          padding: EdgeInsets.fromLTRB(24, 24, 24, 92 + bottomPadding),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -161,7 +187,15 @@ class _AiChatViewState extends State<AiChatView> {
                 'AI Chat',
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.w800,
-                  color: const Color(0xFF111827),
+                  color: textColor,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Ask for task planning help',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: subTextColor,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
               const SizedBox(height: 14),
@@ -177,15 +211,9 @@ class _AiChatViewState extends State<AiChatView> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: cardColor,
                   borderRadius: BorderRadius.circular(24),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Colors.black12,
-                      blurRadius: 16,
-                      offset: Offset(0, 6),
-                    ),
-                  ],
+                  boxShadow: shadow,
                 ),
                 child: Row(
                   children: [
@@ -196,10 +224,14 @@ class _AiChatViewState extends State<AiChatView> {
                         maxLines: 4,
                         textInputAction: TextInputAction.send,
                         onSubmitted: (_) => _sendMessage(),
-                        decoration: const InputDecoration(
+                        style: TextStyle(color: textColor),
+                        decoration: InputDecoration(
                           hintText: 'What do I have to do today?',
+                          hintStyle: TextStyle(color: subTextColor),
                           border: InputBorder.none,
-                          contentPadding: EdgeInsets.symmetric(horizontal: 12),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                          ),
                         ),
                       ),
                     ),

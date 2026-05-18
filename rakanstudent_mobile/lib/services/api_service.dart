@@ -51,14 +51,68 @@ class DashboardSummaryDto {
   const DashboardSummaryDto({
     required this.upcomingBlocks,
     required this.pendingTasksCount,
+    required this.classesTodayCount,
+    this.fixedClasses = const <ClassModel>[],
     this.nextClassName,
     this.nextClassSubtitle,
   });
 
   final List<DashboardUpcomingBlockDto> upcomingBlocks;
   final int pendingTasksCount;
+  final int classesTodayCount;
+  final List<ClassModel> fixedClasses;
   final String? nextClassName;
   final String? nextClassSubtitle;
+
+  String get nextClassTitle {
+    final nextClass = _nextClassToday(fixedClasses);
+    if (nextClass != null) {
+      return nextClass.className;
+    }
+
+    if (fixedClasses.isNotEmpty) {
+      return 'No classes today';
+    }
+
+    final normalizedName = nextClassName?.trim() ?? '';
+    return normalizedName.isEmpty ? 'No classes today' : normalizedName;
+  }
+
+  String get nextClassDetail {
+    final nextClass = _nextClassToday(fixedClasses);
+    if (nextClass != null) {
+      return _formatClassTimeRange(nextClass);
+    }
+
+    if (fixedClasses.isNotEmpty) {
+      return 'Next Class';
+    }
+
+    final normalizedSubtitle = nextClassSubtitle?.trim() ?? '';
+    return normalizedSubtitle.isEmpty ? 'Next Class' : normalizedSubtitle;
+  }
+
+  int get scheduleClassesTodayCount {
+    if (fixedClasses.isEmpty) {
+      return classesTodayCount;
+    }
+
+    final today = DateTime.now().weekday;
+    return fixedClasses
+        .where((classItem) => classItem.dayOfWeek == today)
+        .length;
+  }
+
+  DashboardSummaryDto copyWith({List<ClassModel>? fixedClasses}) {
+    return DashboardSummaryDto(
+      upcomingBlocks: upcomingBlocks,
+      pendingTasksCount: pendingTasksCount,
+      classesTodayCount: classesTodayCount,
+      fixedClasses: fixedClasses ?? this.fixedClasses,
+      nextClassName: nextClassName,
+      nextClassSubtitle: nextClassSubtitle,
+    );
+  }
 
   factory DashboardSummaryDto.fromJson(Map<String, dynamic> json) {
     final tasks = (json['tasks'] as List<dynamic>?) ?? const [];
@@ -82,7 +136,20 @@ class DashboardSummaryDto {
             json['pendingTasksCount'] ??
             json['pending_tasks'] ??
             json['pendingTasks'] ??
-            tasks.length,
+            tasks.where(_isDashboardTask).length,
+      ),
+      classesTodayCount: _dashboardInt(
+        json['classes_today_count'] ??
+            json['classesTodayCount'] ??
+            json['classes_today'] ??
+            json['classesToday'] ??
+            (((json['next_class_name'] ?? json['nextClassName'])
+                        ?.toString()
+                        .trim()
+                        .isNotEmpty ??
+                    false)
+                ? 1
+                : 0),
       ),
       nextClassName:
           (json['next_class_name'] ?? json['nextClassName'])?.toString(),
@@ -91,6 +158,95 @@ class DashboardSummaryDto {
               ?.toString(),
     );
   }
+}
+
+ClassModel? _nextClassToday(List<ClassModel> classes) {
+  if (classes.isEmpty) {
+    return null;
+  }
+
+  final now = DateTime.now();
+  final todaysUpcomingClasses =
+      classes.where((classItem) {
+          if (classItem.dayOfWeek != now.weekday) {
+            return false;
+          }
+
+          final endTime = _classEndToday(classItem, now);
+          return endTime != null && !endTime.isBefore(now);
+        }).toList()
+        ..sort((a, b) {
+          final aStart = _classStartToday(a, now);
+          final bStart = _classStartToday(b, now);
+          if (aStart == null && bStart == null) {
+            return 0;
+          }
+          if (aStart == null) {
+            return 1;
+          }
+          if (bStart == null) {
+            return -1;
+          }
+          return aStart.compareTo(bStart);
+        });
+
+  return todaysUpcomingClasses.isEmpty ? null : todaysUpcomingClasses.first;
+}
+
+DateTime? _classStartToday(ClassModel classItem, DateTime now) {
+  final parts = classItem.startTime.split(':');
+  if (parts.length < 2) {
+    return null;
+  }
+
+  final hour = int.tryParse(parts[0]);
+  final minute = int.tryParse(parts[1]);
+  if (hour == null || minute == null) {
+    return null;
+  }
+
+  return DateTime(now.year, now.month, now.day, hour, minute);
+}
+
+DateTime? _classEndToday(ClassModel classItem, DateTime now) {
+  final parts = classItem.endTime.split(':');
+  if (parts.length < 2) {
+    return null;
+  }
+
+  final hour = int.tryParse(parts[0]);
+  final minute = int.tryParse(parts[1]);
+  if (hour == null || minute == null) {
+    return null;
+  }
+
+  return DateTime(now.year, now.month, now.day, hour, minute);
+}
+
+String _formatClassTimeRange(ClassModel classItem) {
+  return '${_formatClassTime(classItem.startTime)} - ${_formatClassTime(classItem.endTime)}';
+}
+
+String _formatClassTime(String rawTime) {
+  final parts = rawTime.split(':');
+  if (parts.length < 2) {
+    return rawTime;
+  }
+
+  final hour = int.tryParse(parts[0]);
+  final minute = int.tryParse(parts[1]);
+  if (hour == null || minute == null) {
+    return rawTime;
+  }
+
+  final displayHour =
+      hour > 12
+          ? hour - 12
+          : hour == 0
+          ? 12
+          : hour;
+  final suffix = hour >= 12 ? 'PM' : 'AM';
+  return '$displayHour:${minute.toString().padLeft(2, '0')} $suffix';
 }
 
 class DashboardUpcomingBlockDto {
@@ -189,6 +345,31 @@ int _dashboardInt(Object? value) {
   return int.tryParse('${value ?? ''}') ?? 0;
 }
 
+bool _isDashboardTask(Object? item) {
+  if (item is! Map) {
+    return false;
+  }
+
+  final task = Map<String, dynamic>.from(item);
+  final rawType =
+      task['type'] ??
+      task['item_type'] ??
+      task['itemType'] ??
+      task['kind'] ??
+      task['entity_type'] ??
+      task['entityType'];
+  final normalizedType = rawType?.toString().trim().toLowerCase();
+
+  if (normalizedType == null || normalizedType.isEmpty) {
+    return true;
+  }
+
+  return normalizedType == 'task' ||
+      normalizedType == 'primary_task' ||
+      normalizedType == 'subtask' ||
+      normalizedType == 'sub_task';
+}
+
 class ApiService {
   factory ApiService({FlutterSecureStorage? storage}) {
     if (storage != null) {
@@ -209,12 +390,26 @@ class ApiService {
     storage: const FlutterSecureStorage(),
   );
   static final ValueNotifier<int> taskMutationNotifier = ValueNotifier<int>(0);
+  static final ValueNotifier<int> scheduleMutationNotifier = ValueNotifier<int>(
+    0,
+  );
+  static final ValueNotifier<String?> profileNameNotifier =
+      ValueNotifier<String?>(null);
   static String get baseUrl => EnvConfig.apiBaseUrl;
 
   final FlutterSecureStorage _storage;
 
   static void notifyTaskMutation() {
     taskMutationNotifier.value++;
+  }
+
+  static void notifyScheduleMutation() {
+    scheduleMutationNotifier.value++;
+  }
+
+  static void notifyProfileNameChanged(String name) {
+    final normalizedName = name.trim();
+    profileNameNotifier.value = normalizedName.isEmpty ? null : normalizedName;
   }
 
   static void _logFetch(String url) {
@@ -251,6 +446,7 @@ class ApiService {
     try {
       await Supabase.instance.client.auth.signOut();
     } finally {
+      profileNameNotifier.value = null;
       await _storage.delete(key: _jwtTokenKey);
     }
   }
@@ -658,6 +854,30 @@ class ApiService {
         'Profile name update failed: ${response.statusCode} ${response.body}',
       );
     }
+
+    notifyProfileNameChanged(name);
+  }
+
+  Future<String?> fetchCurrentProfileName() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    final userId = user?.id;
+    if (userId == null || userId.trim().isEmpty) {
+      profileNameNotifier.value = null;
+      return null;
+    }
+
+    final response =
+        await Supabase.instance.client
+            .from('user_profiles')
+            .select('full_name')
+            .eq('id', userId)
+            .maybeSingle();
+    final fullName = response?['full_name']?.toString().trim();
+    final normalizedName =
+        fullName == null || fullName.isEmpty ? null : fullName;
+
+    profileNameNotifier.value = normalizedName;
+    return normalizedName;
   }
 
   Future<List<Map<String, dynamic>>> fetchTaskRows() async {
@@ -1405,6 +1625,8 @@ class ApiService {
         'Fixed class save failed: ${response.statusCode} ${response.body}',
       );
     }
+
+    notifyScheduleMutation();
   }
 
   Future<void> deleteClass(String classId) async {
@@ -1439,6 +1661,8 @@ class ApiService {
         'Fixed class delete failed: ${response.statusCode} ${response.body}',
       );
     }
+
+    notifyScheduleMutation();
   }
 
   Future<List<WorkspaceModel>> fetchWorkspacesOverview() async {

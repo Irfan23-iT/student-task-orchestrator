@@ -190,19 +190,28 @@ class _ScheduleViewState extends State<ScheduleView> {
     final theme = Theme.of(context);
     final messenger = ScaffoldMessenger.of(context);
     final accent = _accentColor(index);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardColor = isDark ? const Color(0xFF1A1A1A) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black;
+    final subTextColor = isDark ? Colors.grey[400] : Colors.grey[600];
+    final shadow =
+        isDark
+            ? <BoxShadow>[]
+            : [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+              ),
+            ];
 
     final card = Container(
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        color: cardColor,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: shadow,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -230,7 +239,7 @@ class _ScheduleViewState extends State<ScheduleView> {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.titleMedium?.copyWith(
-                    color: Colors.black,
+                    color: textColor,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -255,7 +264,7 @@ class _ScheduleViewState extends State<ScheduleView> {
                 Text(
                   'Start ${classItem.startTime}  •  End ${classItem.endTime}',
                   style: theme.textTheme.bodySmall?.copyWith(
-                    color: Colors.grey.shade600,
+                    color: subTextColor,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -266,53 +275,67 @@ class _ScheduleViewState extends State<ScheduleView> {
       ),
     );
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Dismissible(
-        key: ValueKey(classItem.id ?? '${classItem.className}-$index'),
-        direction: DismissDirection.endToStart,
-        confirmDismiss: (_) async {
-          final shouldDelete = await _confirmDeleteClass(classItem);
-          if (!shouldDelete) {
-            return false;
-          }
+    return Dismissible(
+      key: ValueKey(classItem.id ?? '${classItem.className}-$index'),
+      direction: DismissDirection.endToStart,
+      confirmDismiss: (_) async {
+        final shouldDelete = await _confirmDeleteClass(classItem);
+        if (!shouldDelete) {
+          return false;
+        }
 
-          return _deleteClass(classItem);
-        },
-        onDismissed: (_) {
-          final classId = classItem.id;
-          setState(() {
-            _classes = _classes
-                .where((entry) => entry.id != classId)
-                .toList(growable: false);
-          });
+        return _deleteClass(classItem);
+      },
+      onDismissed: (_) {
+        final classId = classItem.id;
+        setState(() {
+          _classes = _classes
+              .where((entry) => entry.id != classId)
+              .toList(growable: false);
+        });
 
-          messenger.showSnackBar(
-            SnackBar(content: Text('${classItem.className} deleted.')),
-          );
-        },
-        background: const SizedBox.shrink(),
-        secondaryBackground: Container(
-          alignment: Alignment.centerRight,
-          padding: const EdgeInsets.only(right: 24),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.error,
-            borderRadius: BorderRadius.circular(22),
-          ),
-          child: Icon(
-            Icons.delete_rounded,
-            color: Theme.of(context).colorScheme.onError,
-          ),
+        messenger.showSnackBar(
+          SnackBar(content: Text('${classItem.className} deleted.')),
+        );
+      },
+      background: const SizedBox.shrink(),
+      secondaryBackground: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 24),
+        margin: const EdgeInsets.only(bottom: 16),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.error,
+          borderRadius: BorderRadius.circular(24),
         ),
-        child: card,
+        child: Icon(
+          Icons.delete_rounded,
+          color: Theme.of(context).colorScheme.onError,
+        ),
       ),
+      child: card,
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? Colors.black : const Color(0xFFF5F5F7);
+    final cardColor = isDark ? const Color(0xFF1A1A1A) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black;
+    final subTextColor = isDark ? Colors.grey[400] : Colors.grey[600];
+    final shadow =
+        isDark
+            ? <BoxShadow>[]
+            : [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+              ),
+            ];
+
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: bgColor,
       floatingActionButton: Padding(
         padding: const EdgeInsets.only(bottom: 80),
         child: FloatingActionButton(
@@ -331,21 +354,36 @@ class _ScheduleViewState extends State<ScheduleView> {
           onRefresh: _fetchClasses,
           child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 148),
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 148),
             children: [
-              Text(
-                'Schedule',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  color: Colors.black,
-                  fontWeight: FontWeight.w800,
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: cardColor,
+                  borderRadius: BorderRadius.circular(32),
+                  boxShadow: shadow,
                 ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Your fixed weekly classes',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.grey.shade600,
-                  fontWeight: FontWeight.w500,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Schedule',
+                      style: Theme.of(
+                        context,
+                      ).textTheme.headlineMedium?.copyWith(
+                        color: textColor,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Your fixed weekly classes',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: subTextColor,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 20),
@@ -360,21 +398,16 @@ class _ScheduleViewState extends State<ScheduleView> {
                   child: Text(
                     'No fixed classes yet.',
                     textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.grey.shade600,
-                    ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodyMedium?.copyWith(color: subTextColor),
                   ),
                 )
               else
                 ListView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  padding: const EdgeInsets.only(
-                    bottom: 100,
-                    left: 16,
-                    right: 16,
-                    top: 16,
-                  ),
+                  padding: const EdgeInsets.only(bottom: 100, top: 16),
                   itemCount: _classes.length,
                   itemBuilder: (context, index) {
                     final classItem = _classes[index];
@@ -490,86 +523,127 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
   @override
   Widget build(BuildContext context) {
     final viewInsets = MediaQuery.of(context).viewInsets;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? Colors.black : const Color(0xFFF5F5F7);
+    final cardColor = isDark ? const Color(0xFF1A1A1A) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black;
+    final subTextColor = isDark ? Colors.grey[400] : Colors.grey[600];
+    final shadow =
+        isDark
+            ? <BoxShadow>[]
+            : [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+              ),
+            ];
 
     return SafeArea(
       child: Padding(
-        padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + viewInsets.bottom),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Add Subject',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
+        padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + viewInsets.bottom),
+        child: DecoratedBox(
+          decoration: BoxDecoration(color: bgColor),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Add Subject',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    color: textColor,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _subjectNameController,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  labelText: 'Subject Name',
-                  hintText: 'Calculus',
+                Text(
+                  'Create a fixed weekly class',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(color: subTextColor),
                 ),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<int>(
-                value: _dayValue,
-                decoration: const InputDecoration(labelText: 'Day of Week'),
-                items: _dayLabels.entries
-                    .map(
-                      (entry) => DropdownMenuItem<int>(
-                        value: entry.key,
-                        child: Text(entry.value),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: cardColor,
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: shadow,
+                  ),
+                  child: Column(
+                    children: [
+                      TextField(
+                        controller: _subjectNameController,
+                        autofocus: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Subject Name',
+                          hintText: 'Calculus',
+                        ),
                       ),
-                    )
-                    .toList(growable: false),
-                onChanged: (value) {
-                  setState(() {
-                    _dayValue = value ?? 1;
-                  });
-                },
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _classTypeController,
-                decoration: const InputDecoration(
-                  labelText: 'Class Type',
-                  hintText: 'Lecture',
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<int>(
+                        value: _dayValue,
+                        decoration: const InputDecoration(
+                          labelText: 'Day of Week',
+                        ),
+                        items: _dayLabels.entries
+                            .map(
+                              (entry) => DropdownMenuItem<int>(
+                                value: entry.key,
+                                child: Text(entry.value),
+                              ),
+                            )
+                            .toList(growable: false),
+                        onChanged: (value) {
+                          setState(() {
+                            _dayValue = value ?? 1;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _classTypeController,
+                        decoration: const InputDecoration(
+                          labelText: 'Class Type',
+                          hintText: 'Lecture',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _startTimeController,
+                        decoration: const InputDecoration(
+                          labelText: 'Start Time',
+                          hintText: '09:00:00',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _endTimeController,
+                        decoration: const InputDecoration(
+                          labelText: 'End Time',
+                          hintText: '10:00:00',
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        onPressed: _isSaving ? null : _saveSubject,
+                        icon:
+                            _isSaving
+                                ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                                : const Icon(Icons.save_alt_rounded),
+                        label: Text(_isSaving ? 'Saving...' : 'Save Subject'),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _startTimeController,
-                decoration: const InputDecoration(
-                  labelText: 'Start Time',
-                  hintText: '09:00:00',
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _endTimeController,
-                decoration: const InputDecoration(
-                  labelText: 'End Time',
-                  hintText: '10:00:00',
-                ),
-              ),
-              const SizedBox(height: 16),
-              FilledButton.icon(
-                onPressed: _isSaving ? null : _saveSubject,
-                icon:
-                    _isSaving
-                        ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                        : const Icon(Icons.save_alt_rounded),
-                label: Text(_isSaving ? 'Saving...' : 'Save Subject'),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

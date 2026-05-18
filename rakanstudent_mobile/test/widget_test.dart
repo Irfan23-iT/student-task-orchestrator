@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:rakanstudent_mobile/core/theme_provider.dart';
 import 'package:rakanstudent_mobile/features/auth/login_screen.dart';
 import 'package:rakanstudent_mobile/features/auth/signup_screen.dart';
 import 'package:rakanstudent_mobile/features/home/dashboard_view.dart';
@@ -286,6 +287,52 @@ void main() {
     expect(find.text('Calendar marker task'), findsOneWidget);
   });
 
+  testWidgets('Calendar view deduplicates repeated task rows', (tester) async {
+    final now = DateTime.now();
+    final taskMorning = Task(
+      id: 'task-1',
+      userId: 'user-1',
+      title: 'Calendar marker task',
+      isCompleted: false,
+      createdAt: now,
+      dueDate: DateTime(now.year, now.month, now.day, 9),
+      priorityBand: 'High',
+    );
+    final taskAfternoon = Task(
+      id: 'primary-task-1',
+      userId: 'user-1',
+      title: ' calendar marker task ',
+      isCompleted: false,
+      createdAt: now,
+      dueDate: DateTime(now.year, now.month, now.day, 13),
+      priorityBand: 'High',
+    );
+    final taskEvening = Task(
+      id: 'task-row-1',
+      userId: 'user-1',
+      title: 'Calendar   marker   TASK',
+      isCompleted: false,
+      createdAt: now,
+      dueDate: DateTime(now.year, now.month, now.day, 17),
+      priorityBand: 'High',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CalendarView(
+          initialTasks: [taskMorning, taskAfternoon, taskEvening],
+          fetchOnInit: false,
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    expect(find.text('Calendar marker task'), findsOneWidget);
+    expect(find.text(' calendar marker task '), findsNothing);
+    expect(find.text('Calendar   marker   TASK'), findsNothing);
+  });
+
   testWidgets('Calendar view renders recurring class markers and list items', (
     tester,
   ) async {
@@ -335,7 +382,31 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Profile'), findsOneWidget);
-    expect(find.text('Sleep Schedule'), findsOneWidget);
+    expect(find.text('Sleep Schedule'), findsNothing);
     expect(find.text('Integrations'), findsOneWidget);
+    expect(find.text('Dark Mode'), findsOneWidget);
+  });
+
+  testWidgets('Profile dark mode switch updates theme provider', (
+    tester,
+  ) async {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: ProfileView()),
+      ),
+    );
+
+    await tester.pump();
+
+    expect(container.read(themeModeProvider), ThemeMode.dark);
+
+    await tester.tap(find.byType(Switch));
+    await tester.pump();
+
+    expect(container.read(themeModeProvider), ThemeMode.light);
   });
 }

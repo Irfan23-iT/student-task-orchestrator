@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../app/theme/app_theme.dart';
+import 'auth_layout_wrapper.dart';
 import 'login_screen.dart';
 
 class SignUpScreen extends StatefulWidget {
@@ -108,147 +108,99 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.scaffoldBackground,
-      appBar: AppBar(title: const Text('Create Account')),
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x14000000),
-                      blurRadius: 24,
-                      offset: Offset(0, 12),
-                    ),
-                  ],
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(
-                          'Create your account',
-                          style: Theme.of(
-                            context,
-                          ).textTheme.headlineMedium?.copyWith(
-                            color: const Color(0xFF1D1D1F),
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Sign up with your email and password to get started.',
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(color: const Color(0xFF86868B)),
-                        ),
-                        const SizedBox(height: 24),
-                        TextFormField(
-                          controller: _emailController,
-                          keyboardType: TextInputType.emailAddress,
-                          decoration: const InputDecoration(labelText: 'Email'),
-                          validator: (value) {
-                            final email = value?.trim() ?? '';
-                            if (email.isEmpty) {
-                              return 'Email is required';
-                            }
-
-                            if (!_emailPattern.hasMatch(email)) {
-                              return 'Enter a valid email address';
-                            }
-
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        TextFormField(
-                          controller: _passwordController,
-                          obscureText: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Password',
-                          ),
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Password is required';
-                            }
-
-                            if (value.length < 6) {
-                              return 'Password must be at least 6 characters';
-                            }
-
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        TextFormField(
-                          controller: _confirmPasswordController,
-                          obscureText: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Confirm Password',
-                          ),
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Confirm password is required';
-                            }
-
-                            if (value != _passwordController.text) {
-                              return 'Passwords do not match';
-                            }
-
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 24),
-                        SizedBox(
-                          height: 52,
-                          child: ElevatedButton(
-                            onPressed: _isLoading ? null : _submit,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppTheme.primary,
-                              foregroundColor: Colors.white,
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              textStyle: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            child:
-                                _isLoading
-                                    ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        valueColor:
-                                            AlwaysStoppedAnimation<Color>(
-                                              Colors.white,
-                                            ),
-                                      ),
-                                    )
-                                    : const Text('Sign Up'),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+    return AuthViewPortLayout(
+      title: 'Create your account',
+      subtitle: 'Sign up with your email and password to get started.',
+      logo: const AuthLogoMark(icon: Icons.hub_rounded),
+      formBody: Form(
+        key: _formKey,
+        child: Column(
+          children: [
+            TextFormField(
+              controller: _emailController,
+              keyboardType: TextInputType.emailAddress,
+              decoration: authInputDecoration(
+                context: context,
+                hintText: 'Email',
+                icon: Icons.alternate_email_rounded,
               ),
+              validator: (value) {
+                final email = value?.trim() ?? '';
+                if (email.isEmpty) {
+                  return 'Email is required';
+                }
+
+                if (!_emailPattern.hasMatch(email)) {
+                  return 'Enter a valid email address';
+                }
+
+                return null;
+              },
             ),
-          ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _passwordController,
+              obscureText: true,
+              decoration: authInputDecoration(
+                context: context,
+                hintText: 'Password',
+                icon: Icons.lock_outline_rounded,
+              ),
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Password is required';
+                }
+
+                if (value.length < 6) {
+                  return 'Password must be at least 6 characters';
+                }
+
+                return null;
+              },
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _confirmPasswordController,
+              obscureText: true,
+              decoration: authInputDecoration(
+                context: context,
+                hintText: 'Confirm Password',
+                icon: Icons.verified_user_outlined,
+              ),
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Confirm password is required';
+                }
+
+                if (value != _passwordController.text) {
+                  return 'Passwords do not match';
+                }
+
+                return null;
+              },
+            ),
+          ],
         ),
+      ),
+      primaryActionButton: authGradientButton(
+        label: 'Sign Up',
+        icon: Icons.person_add_alt_1_rounded,
+        onPressed: _submit,
+        isLoading: _isLoading,
+      ),
+      secondaryActionLink: TextButton(
+        onPressed:
+            _isLoading
+                ? null
+                : () {
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute<void>(
+                      builder: (context) => const LoginScreen(),
+                    ),
+                    (route) => false,
+                  );
+                },
+        child: const Text('Already have an account? Login'),
       ),
     );
   }

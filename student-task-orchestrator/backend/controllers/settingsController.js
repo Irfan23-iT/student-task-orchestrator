@@ -179,8 +179,15 @@ export const upsertProfileSettings = async (req, res) => {
         }),
         serviceSupabase
           .from('user_profiles')
-          .upsert(toProfileNameRow(req.user.id, profileName), { onConflict: 'user_id' })
-          .select('full_name')
+          .upsert(
+            {
+              id: req.user.id,
+              user_id: req.user.id,
+              full_name: profileName
+            },
+            { onConflict: 'id' }
+          )
+          .select()
           .single()
       ]);
 

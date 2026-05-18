@@ -7,11 +7,26 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../models/analytics_model.dart';
+import '../../models/class_model.dart';
 import '../../services/api_service.dart';
 import 'sprint_game_screen.dart';
 
 class DashboardView extends StatefulWidget {
-  const DashboardView({super.key});
+  const DashboardView({
+    super.key,
+    ApiService? apiService,
+    @visibleForTesting
+    Future<DashboardSummaryDto> Function()? fetchDashboardSummary,
+    @visibleForTesting Future<List<ClassModel>> Function()? fetchFixedClasses,
+    @visibleForTesting this.enableStartupSideEffects = true,
+  }) : _apiService = apiService,
+       _fetchDashboardSummary = fetchDashboardSummary,
+       _fetchFixedClasses = fetchFixedClasses;
+
+  final ApiService? _apiService;
+  final Future<DashboardSummaryDto> Function()? _fetchDashboardSummary;
+  final Future<List<ClassModel>> Function()? _fetchFixedClasses;
+  final bool enableStartupSideEffects;
 
   @override
   State<DashboardView> createState() => _DashboardViewState();
@@ -22,7 +37,7 @@ class _DashboardViewState extends State<DashboardView>
   static const List<int> _focusDurationOptions = [15, 25, 50];
   static const int _defaultFocusDurationMinutes = 25;
 
-  final ApiService _apiService = ApiService();
+  late final ApiService _apiService = widget._apiService ?? ApiService();
 
   int _currentStreak = 0;
   Timer? _timer;
@@ -42,10 +57,14 @@ class _DashboardViewState extends State<DashboardView>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _dashboardFuture = _loadDashboardSummary();
-    unawaited(_loadAnalyticsOverview());
-    unawaited(_loadFocusPreferences());
+    if (widget.enableStartupSideEffects) {
+      unawaited(_loadAnalyticsOverview());
+      unawaited(_loadFocusPreferences());
+      unawaited(_loadProfileName());
+      _runApiBridgeHealthTest();
+    }
     ApiService.taskMutationNotifier.addListener(_handleTaskMutation);
-    _runApiBridgeHealthTest();
+    ApiService.scheduleMutationNotifier.addListener(_handleScheduleMutation);
   }
 
   @override
@@ -53,6 +72,7 @@ class _DashboardViewState extends State<DashboardView>
     WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
     ApiService.taskMutationNotifier.removeListener(_handleTaskMutation);
+    ApiService.scheduleMutationNotifier.removeListener(_handleScheduleMutation);
     super.dispose();
   }
 
@@ -101,6 +121,18 @@ class _DashboardViewState extends State<DashboardView>
 
   Future<void> _handleTaskMutation() async {
     await _reloadDashboard();
+  }
+
+  Future<void> _handleScheduleMutation() async {
+    await _reloadDashboard();
+  }
+
+  Future<void> _loadProfileName() async {
+    try {
+      await _apiService.fetchCurrentProfileName();
+    } catch (error) {
+      debugPrint('Profile name fetch failed: $error');
+    }
   }
 
   Future<void> _runApiBridgeHealthTest() async {
@@ -155,8 +187,10 @@ class _DashboardViewState extends State<DashboardView>
       _dashboardFuture = future;
     }
 
-    unawaited(_loadAnalyticsOverview());
-    unawaited(_loadFocusPreferences());
+    if (widget.enableStartupSideEffects) {
+      unawaited(_loadAnalyticsOverview());
+      unawaited(_loadFocusPreferences());
+    }
 
     return future.then<void>((_) {});
   }
@@ -348,19 +382,25 @@ class _DashboardViewState extends State<DashboardView>
   }
 
   Future<DashboardSummaryDto> _loadDashboardSummary() async {
-    final summary = await _apiService.fetchDashboardSummary();
+    final results = await Future.wait<Object>([
+      (widget._fetchDashboardSummary ?? _apiService.fetchDashboardSummary)(),
+      (widget._fetchFixedClasses ?? _apiService.fetchFixedClasses)(),
+    ]);
+    final summary = results[0] as DashboardSummaryDto;
+    final fixedClasses = results[1] as List<ClassModel>;
+    final hydratedSummary = summary.copyWith(fixedClasses: fixedClasses);
 
     print(
       'DEBUG: Dashboard summary fetched '
-      '${summary.upcomingBlocks.length} upcoming blocks',
+      '${hydratedSummary.upcomingBlocks.length} upcoming blocks',
     );
 
     await _runDashboardPolishTest(
-      pendingTasksCount: summary.pendingTasksCount,
-      classesTodayCount: summary.upcomingBlocks.length,
+      pendingTasksCount: hydratedSummary.pendingTasksCount,
+      classesTodayCount: hydratedSummary.scheduleClassesTodayCount,
     );
 
-    return summary;
+    return hydratedSummary;
   }
 
   Future<void> _signOut(BuildContext context) async {
@@ -425,32 +465,6 @@ class _DashboardViewState extends State<DashboardView>
     return _formatReminderTimestamp(value);
   }
 
-  String _formatBlockTimeRange(DashboardUpcomingBlockDto block) {
-    final start = block.startsAt?.toLocal();
-    final end = block.endsAt?.toLocal();
-    if (start == null) {
-      return 'Upcoming task';
-    }
-
-    String timeOnly(DateTime value) {
-      final hour =
-          value.hour > 12
-              ? value.hour - 12
-              : value.hour == 0
-              ? 12
-              : value.hour;
-      final minutes = value.minute.toString().padLeft(2, '0');
-      final suffix = value.hour >= 12 ? 'PM' : 'AM';
-      return '$hour:$minutes $suffix';
-    }
-
-    if (end == null) {
-      return 'Starts ${timeOnly(start)}';
-    }
-
-    return '${timeOnly(start)} - ${timeOnly(end)}';
-  }
-
   Future<void> _openSprintChallenge() async {
     final score = await Navigator.of(context).push<int>(
       PageRouteBuilder<int>(
@@ -513,36 +527,33 @@ class _DashboardViewState extends State<DashboardView>
 
   Widget _buildStreakBadge(BuildContext context, int streak) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [colorScheme.secondary, colorScheme.secondaryContainer],
-        ),
+        color: isDark ? const Color(0xFF1A1A1A) : Colors.white,
         borderRadius: BorderRadius.circular(999),
-        boxShadow: [
-          BoxShadow(
-            color: colorScheme.secondary.withValues(alpha: 0.18),
-            blurRadius: 16,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        border: Border.all(
+          color:
+              isDark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.black.withValues(alpha: 0.04),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
+          const Icon(
             Icons.local_fire_department_rounded,
-            color: colorScheme.onSecondary,
+            color: Color(0xFF20E3B2),
             size: 18,
           ),
           const SizedBox(width: 6),
           Text(
             '$streak',
             style: theme.textTheme.labelLarge?.copyWith(
-              color: colorScheme.onSecondary,
+              color: isDark ? Colors.white : Colors.black,
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -553,12 +564,26 @@ class _DashboardViewState extends State<DashboardView>
 
   Widget _buildOverviewCard({
     required int index,
-    required double width,
-    required Color color,
+    required Color accent,
     required Widget child,
   }) {
     final isPressed = _pressedOverviewCards.contains(index);
-    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final baseCardColor = isDark ? const Color(0xFF1A1A1A) : Colors.white;
+    final cardColor = Color.alphaBlend(
+      accent.withValues(alpha: isDark ? 0.16 : 0.10),
+      baseCardColor,
+    );
+    final shadow =
+        isDark
+            ? <BoxShadow>[]
+            : [
+              BoxShadow(
+                color: accent.withValues(alpha: 0.10),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+              ),
+            ];
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -582,21 +607,14 @@ class _DashboardViewState extends State<DashboardView>
         duration: const Duration(milliseconds: 140),
         curve: Curves.easeOutCubic,
         child: Container(
-          width: width,
-          padding: const EdgeInsets.all(18),
+          padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(24),
+            color: cardColor,
+            borderRadius: BorderRadius.circular(32),
             border: Border.all(
-              color: colorScheme.outline.withValues(alpha: 0.26),
+              color: accent.withValues(alpha: isDark ? 0.30 : 0.14),
             ),
-            boxShadow: [
-              BoxShadow(
-                color: colorScheme.primary.withValues(alpha: 0.16),
-                blurRadius: 24,
-                offset: const Offset(0, 12),
-              ),
-            ],
+            boxShadow: shadow,
           ),
           child: child,
         ),
@@ -604,9 +622,18 @@ class _DashboardViewState extends State<DashboardView>
     );
   }
 
-  Widget _buildSprintChallengeCard(BuildContext context) {
+  Widget _buildSprintChallengeCard(
+    BuildContext context, {
+    required Color sprintAccent,
+  }) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : Colors.black;
+    final baseCardColor = isDark ? const Color(0xFF1A1A1A) : Colors.white;
+    final tintedCardColor = Color.alphaBlend(
+      sprintAccent.withValues(alpha: isDark ? 0.18 : 0.12),
+      baseCardColor,
+    );
 
     return AnimatedScale(
       scale: _isSprintCardPressed ? 0.98 : 1.0,
@@ -626,63 +653,40 @@ class _DashboardViewState extends State<DashboardView>
           child: Ink(
             width: double.infinity,
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  colorScheme.secondaryContainer,
-                  colorScheme.surfaceContainerHighest,
-                ],
-              ),
+              color: tintedCardColor,
               borderRadius: BorderRadius.circular(24),
               border: Border.all(
-                color: colorScheme.secondary.withValues(alpha: 0.50),
+                color: sprintAccent.withValues(alpha: isDark ? 0.34 : 0.18),
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: colorScheme.secondary.withValues(alpha: 0.18),
-                  blurRadius: 32,
-                  offset: const Offset(0, 16),
-                ),
-                BoxShadow(
-                  color: colorScheme.shadow.withValues(alpha: 0.18),
-                  blurRadius: 24,
-                  offset: const Offset(0, 12),
-                ),
-              ],
             ),
             child: Padding(
-              padding: const EdgeInsets.all(18),
+              padding: const EdgeInsets.all(24),
               child: Row(
                 children: [
                   Container(
-                    width: 58,
-                    height: 58,
+                    padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: colorScheme.secondary.withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(
-                        color: colorScheme.secondary.withValues(alpha: 0.40),
-                      ),
+                      color: sprintAccent.withValues(alpha: 0.20),
+                      shape: BoxShape.circle,
                     ),
                     child: Icon(
-                      Icons.sports_motorsports_rounded,
-                      color: colorScheme.secondary,
-                      size: 30,
+                      Icons.sports_motorsports_outlined,
+                      color: sprintAccent,
                     ),
                   ),
                   const SizedBox(width: 16),
-                  Expanded(
+                  Flexible(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
                           'Focus Reward',
-                          style: theme.textTheme.labelLarge?.copyWith(
-                            color: colorScheme.secondary,
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: sprintAccent,
                             fontWeight: FontWeight.w800,
-                            letterSpacing: 0.8,
+                            fontSize: 12,
+                            letterSpacing: 1.2,
                           ),
                         ),
                         const SizedBox(height: 6),
@@ -691,45 +695,17 @@ class _DashboardViewState extends State<DashboardView>
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.titleLarge?.copyWith(
-                            color: colorScheme.onSecondaryContainer,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color: colorScheme.surface.withValues(alpha: 0.30),
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(
-                        color: colorScheme.outline.withValues(alpha: 0.22),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'Tap to Race',
-                          style: theme.textTheme.labelLarge?.copyWith(
-                            color: colorScheme.onSecondaryContainer,
+                            color: textColor,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
-                        const SizedBox(width: 6),
-                        Icon(
-                          Icons.arrow_forward_rounded,
-                          color: colorScheme.onSecondaryContainer,
-                          size: 18,
-                        ),
                       ],
                     ),
                   ),
+                  const Spacer(),
+                  const Text('Tap to Race'),
+                  const SizedBox(width: 8),
+                  Icon(Icons.chevron_right, color: sprintAccent),
                 ],
               ),
             ),
@@ -746,21 +722,16 @@ class _DashboardViewState extends State<DashboardView>
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final channelColor = _channelColor(context, block.priority);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: colorScheme.surface,
+        color:
+            isDark
+                ? Colors.white.withValues(alpha: 0.03)
+                : const Color(0xFFF5F5F7),
         borderRadius: BorderRadius.circular(22),
-        boxShadow: [
-          BoxShadow(
-            color: colorScheme.shadow.withValues(
-              alpha: theme.brightness == Brightness.dark ? 0.24 : 0.08,
-            ),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          ),
-        ],
       ),
       child: Padding(
         padding: const EdgeInsets.all(14),
@@ -771,12 +742,12 @@ class _DashboardViewState extends State<DashboardView>
               width: 52,
               height: 52,
               decoration: BoxDecoration(
-                color: colorScheme.secondary,
+                color: const Color(0xFF20E3B2).withValues(alpha: 0.16),
                 borderRadius: BorderRadius.circular(18),
               ),
-              child: Icon(
+              child: const Icon(
                 Icons.notifications_active_rounded,
-                color: colorScheme.onSecondary,
+                color: Color(0xFF20E3B2),
                 size: 24,
               ),
             ),
@@ -831,44 +802,6 @@ class _DashboardViewState extends State<DashboardView>
     );
   }
 
-  Widget _buildDashboardLoadingCard(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Container(
-      height: 170,
-      margin: const EdgeInsets.symmetric(horizontal: 20),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: colorScheme.outline.withValues(alpha: 0.24)),
-      ),
-      child: Center(
-        child: CircularProgressIndicator(color: colorScheme.primary),
-      ),
-    );
-  }
-
-  String _nextClassNameFromSummary(DashboardSummaryDto summary) {
-    final firstBlock =
-        summary.upcomingBlocks.isEmpty ? null : summary.upcomingBlocks.first;
-
-    return summary.nextClassName?.trim().isNotEmpty == true
-        ? summary.nextClassName!.trim()
-        : firstBlock?.title ?? 'No classes today';
-  }
-
-  String _nextClassSubtitleFromSummary(DashboardSummaryDto summary) {
-    final firstBlock =
-        summary.upcomingBlocks.isEmpty ? null : summary.upcomingBlocks.first;
-
-    return summary.nextClassSubtitle?.trim().isNotEmpty == true
-        ? summary.nextClassSubtitle!.trim()
-        : firstBlock == null
-        ? 'Next Class'
-        : _formatBlockTimeRange(firstBlock);
-  }
-
   Widget _buildDashboardError(BuildContext context, Object error) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
@@ -882,117 +815,169 @@ class _DashboardViewState extends State<DashboardView>
     );
   }
 
-  Widget _buildOverviewCards(BuildContext context) {
+  Widget _buildOverviewCards(
+    BuildContext context, {
+    required Color taskAccent,
+    required Color classAccent,
+  }) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final subTextColor = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
+
+    Widget buildBentoGrid({
+      required String pendingTasksValue,
+      required String nextClassName,
+      required String nextClassSubtitle,
+    }) {
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final cardHeight = constraints.maxWidth >= 520 ? 164.0 : 156.0;
+
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: cardHeight,
+                  child: _buildOverviewCard(
+                    index: 0,
+                    accent: taskAccent,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Icon(Icons.check_rounded, color: taskAccent, size: 30),
+                        const SizedBox(height: 18),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            FittedBox(
+                              alignment: Alignment.centerLeft,
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                pendingTasksValue,
+                                style: theme.textTheme.displaySmall?.copyWith(
+                                  color: taskAccent,
+                                  fontSize: 38,
+                                  fontWeight: FontWeight.bold,
+                                  height: 0.95,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Tasks Pending',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                color: subTextColor,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 18),
+              Expanded(
+                child: SizedBox(
+                  height: cardHeight,
+                  child: ValueListenableBuilder<int>(
+                    valueListenable: ApiService.scheduleMutationNotifier,
+                    builder: (context, scheduleVersion, _) {
+                      return _buildOverviewCard(
+                        index: 1,
+                        accent: classAccent,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Icon(
+                              Icons.schedule_rounded,
+                              color: classAccent,
+                              size: 30,
+                            ),
+                            const SizedBox(height: 18),
+                            Column(
+                              key: ValueKey<int>(scheduleVersion),
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                FittedBox(
+                                  alignment: Alignment.centerLeft,
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    nextClassName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.titleLarge?.copyWith(
+                                      color: classAccent,
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w800,
+                                      height: 1.2,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  nextClassSubtitle,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    color: subTextColor,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      );
+    }
 
     return FutureBuilder<DashboardSummaryDto>(
       future: _dashboardFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return _buildDashboardLoadingCard(context);
+          return buildBentoGrid(
+            pendingTasksValue: '--',
+            nextClassName: 'No classes today',
+            nextClassSubtitle: 'Next Class',
+          );
         }
 
         if (snapshot.hasError) {
-          return _buildDashboardError(context, snapshot.error!);
+          return buildBentoGrid(
+            pendingTasksValue: '0',
+            nextClassName: 'No classes today',
+            nextClassSubtitle: 'Next Class',
+          );
         }
 
         if (!snapshot.hasData) {
-          return _buildDashboardError(
-            context,
-            StateError('Dashboard summary completed without data.'),
+          return buildBentoGrid(
+            pendingTasksValue: '0',
+            nextClassName: 'No classes today',
+            nextClassSubtitle: 'Next Class',
           );
         }
 
         final summary = snapshot.data!;
         final pendingTasksValue = summary.pendingTasksCount.toString();
-        final nextClassName = _nextClassNameFromSummary(summary);
-        final nextClassSubtitle = _nextClassSubtitleFromSummary(summary);
-        final nextClassFontSize =
-            nextClassName.length > 28
-                ? 20.0
-                : nextClassName.length > 18
-                ? 22.0
-                : 24.0;
-
-        return SizedBox(
-          height: 170,
-          child: ListView(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            children: [
-              _buildOverviewCard(
-                index: 0,
-                width: 200,
-                color: colorScheme.primaryContainer,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      Icons.check_rounded,
-                      color: colorScheme.onPrimaryContainer,
-                      size: 30,
-                    ),
-                    const Spacer(),
-                    Text(
-                      pendingTasksValue,
-                      style: theme.textTheme.displaySmall?.copyWith(
-                        color: colorScheme.onPrimaryContainer,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Tasks Pending',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        color: colorScheme.onPrimaryContainer,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 14),
-              _buildOverviewCard(
-                index: 1,
-                width: 240,
-                color: colorScheme.surfaceContainerHighest,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      Icons.schedule_rounded,
-                      color: colorScheme.secondary,
-                      size: 30,
-                    ),
-                    const Spacer(),
-                    Text(
-                      nextClassName,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        color: colorScheme.onSurface,
-                        fontSize: nextClassFontSize,
-                        fontWeight: FontWeight.w800,
-                        height: 1.08,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      nextClassSubtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+        return buildBentoGrid(
+          pendingTasksValue: pendingTasksValue,
+          nextClassName: summary.nextClassTitle,
+          nextClassSubtitle: summary.nextClassDetail,
         );
       },
     );
@@ -1001,14 +986,38 @@ class _DashboardViewState extends State<DashboardView>
   Widget _buildActiveReminders(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final cardColor = isDark ? const Color(0xFF1A1A1A) : Colors.white;
+    final shadow =
+        isDark
+            ? <BoxShadow>[]
+            : [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+              ),
+            ];
+
+    Widget wrapReminderBody(Widget child) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: shadow,
+        ),
+        child: child,
+      );
+    }
 
     return FutureBuilder<DashboardSummaryDto>(
       future: _dashboardFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            child: LinearProgressIndicator(color: colorScheme.primary),
+          return wrapReminderBody(
+            LinearProgressIndicator(color: colorScheme.primary),
           );
         }
 
@@ -1026,20 +1035,18 @@ class _DashboardViewState extends State<DashboardView>
         final reminders = snapshot.data!.upcomingBlocks;
 
         if (reminders.isEmpty) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            child: Text(
+          return wrapReminderBody(
+            Text(
               'No active reminders right now',
               style: theme.textTheme.bodyMedium?.copyWith(
-                color: colorScheme.onSurfaceVariant,
+                color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
               ),
             ),
           );
         }
 
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: ListView.builder(
+        return wrapReminderBody(
+          ListView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: reminders.length,
@@ -1055,220 +1062,238 @@ class _DashboardViewState extends State<DashboardView>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final displayName = _resolveDisplayName();
+    final isDark = theme.brightness == Brightness.dark;
+    final bgColor = isDark ? Colors.black : const Color(0xFFF5F5F7);
+    final cardColor = isDark ? const Color(0xFF1A1A1A) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black;
+    final subTextColor = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
+    final shadow =
+        isDark
+            ? <BoxShadow>[]
+            : [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+              ),
+            ];
+    final taskAccent =
+        isDark ? const Color(0xFFB388FF) : const Color(0xFF651FFF);
+    final classAccent =
+        isDark ? const Color(0xFFFF8A65) : const Color(0xFFFF5722);
+    final sprintAccent =
+        isDark ? const Color(0xFFFFCA28) : const Color(0xFFFF8F00);
+    final fallbackDisplayName = _resolveDisplayName();
     final currentStreak = _currentStreak;
 
     return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
+      backgroundColor: bgColor,
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _reloadDashboard,
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.only(bottom: 140.0),
+            padding: const EdgeInsets.all(24.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Good morning',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: colorScheme.onSurfaceVariant,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              displayName,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.headlineMedium?.copyWith(
-                                color: colorScheme.onSurface,
-                                fontWeight: FontWeight.w800,
-                                height: 1.05,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildStreakBadge(context, currentStreak),
-                          const SizedBox(width: 8),
-                          Material(
-                            color: colorScheme.surface,
-                            shape: const CircleBorder(),
-                            child: IconButton(
-                              onPressed: () => _signOut(context),
-                              icon: const Icon(Icons.logout_rounded),
-                              color: colorScheme.onSurface,
-                              tooltip: 'Sign Out',
+                          Text(
+                            'Good morning',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: subTextColor,
+                              fontWeight: FontWeight.w600,
                             ),
+                          ),
+                          const SizedBox(height: 6),
+                          ValueListenableBuilder<String?>(
+                            valueListenable: ApiService.profileNameNotifier,
+                            builder: (context, profileName, _) {
+                              final displayName =
+                                  profileName?.trim().isNotEmpty == true
+                                      ? profileName!.trim()
+                                      : fallbackDisplayName;
+
+                              return Text(
+                                displayName,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.headlineMedium?.copyWith(
+                                  color: textColor,
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.5,
+                                  height: 1.05,
+                                ),
+                              );
+                            },
                           ),
                         ],
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(width: 12),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildStreakBadge(context, currentStreak),
+                        const SizedBox(width: 8),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: cardColor,
+                            shape: BoxShape.circle,
+                            boxShadow: shadow,
+                          ),
+                          child: IconButton(
+                            onPressed: () => _signOut(context),
+                            icon: const Icon(Icons.logout_rounded),
+                            color: textColor,
+                            tooltip: 'Sign Out',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 24),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTapDown: (_) {
-                      setState(() {
-                        _isFocusCardPressed = true;
-                      });
-                    },
-                    onTapUp: (_) {
-                      setState(() {
-                        _isFocusCardPressed = false;
-                      });
-                    },
-                    onTapCancel: () {
-                      setState(() {
-                        _isFocusCardPressed = false;
-                      });
-                    },
-                    child: AnimatedScale(
-                      scale: _isFocusCardPressed ? 0.985 : 1.0,
-                      duration: const Duration(milliseconds: 140),
-                      curve: Curves.easeOutCubic,
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 220),
-                        curve: Curves.easeOutCubic,
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              colorScheme.primaryContainer,
-                              colorScheme.surfaceContainerHighest,
+                Text(
+                  'Focus Mode',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: subTextColor,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.1,
+                  ),
+                ),
+                AnimatedScale(
+                  scale: _isFocusCardPressed ? 0.985 : 1.0,
+                  duration: const Duration(milliseconds: 140),
+                  curve: Curves.easeOutCubic,
+                  child: Container(
+                    width: double.infinity,
+                    height: 72,
+                    margin: const EdgeInsets.symmetric(vertical: 24),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF20E3B2), Color(0xFF00A3FF)],
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                      ),
+                      borderRadius: BorderRadius.circular(100),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Tooltip(
+                      message:
+                          _isFocusTimerActive
+                              ? 'Pause Focus Timer'
+                              : 'Start Focus Timer',
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(100),
+                          onTap: _toggleFocusTimer,
+                          onHighlightChanged: (isPressed) {
+                            setState(() {
+                              _isFocusCardPressed = isPressed;
+                            });
+                          },
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Flexible(
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      _isFocusTimerActive
+                                          ? Icons.pause_rounded
+                                          : Icons.play_arrow_rounded,
+                                      color: Colors.black,
+                                      size: 32,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    const Flexible(
+                                      child: Text(
+                                        'Start Focus Mode',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: Colors.black,
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Tooltip(
+                                message: 'Switch Focus Duration',
+                                child: GestureDetector(
+                                  onTap: _cycleFocusDuration,
+                                  child: Text(
+                                    _formatFocusTime(),
+                                    style: const TextStyle(
+                                      color: Colors.black,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w800,
+                                      fontFeatures: [
+                                        FontFeature.tabularFigures(),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ],
                           ),
-                          borderRadius: BorderRadius.circular(24),
-                          border: Border.all(
-                            color: colorScheme.outline.withValues(alpha: 0.22),
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: colorScheme.primary.withValues(
-                                alpha: 0.18,
-                              ),
-                              blurRadius: 30,
-                              offset: const Offset(0, 14),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 54,
-                              height: 54,
-                              decoration: BoxDecoration(
-                                color: colorScheme.primary,
-                                borderRadius: BorderRadius.circular(18),
-                              ),
-                              child: IconButton(
-                                onPressed: _toggleFocusTimer,
-                                icon: Icon(
-                                  _isFocusTimerActive
-                                      ? Icons.pause_rounded
-                                      : Icons.play_arrow_rounded,
-                                ),
-                                color: colorScheme.onPrimary,
-                                iconSize: 28,
-                                tooltip:
-                                    _isFocusTimerActive
-                                        ? 'Pause Focus Timer'
-                                        : 'Start Focus Timer',
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Text(
-                                'Focus Mode',
-                                style: theme.textTheme.titleLarge?.copyWith(
-                                  color: colorScheme.onPrimaryContainer,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ),
-                            Tooltip(
-                              message: 'Switch Focus Duration',
-                              child: GestureDetector(
-                                onTap: _cycleFocusDuration,
-                                child: Text(
-                                  _formatFocusTime(),
-                                  style: theme.textTheme.headlineSmall
-                                      ?.copyWith(
-                                        color: colorScheme.secondary,
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                ),
-                              ),
-                            ),
-                          ],
                         ),
                       ),
                     ),
                   ),
                 ),
                 const SizedBox(height: 28),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Text(
-                    'QUICK OVERVIEW',
-                    style: theme.textTheme.labelLarge?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.1,
-                    ),
+                Text(
+                  'QUICK OVERVIEW',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: subTextColor,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.1,
                   ),
                 ),
                 const SizedBox(height: 12),
-                _buildOverviewCards(context),
-                const SizedBox(height: 20),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: _buildSprintChallengeCard(context),
+                _buildOverviewCards(
+                  context,
+                  taskAccent: taskAccent,
+                  classAccent: classAccent,
                 ),
+                const SizedBox(height: 24),
+                _buildSprintChallengeCard(context, sprintAccent: sprintAccent),
                 const SizedBox(height: 28),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Row(
-                    children: [
-                      Text(
-                        'ACTIVE REMINDERS',
-                        style: theme.textTheme.labelLarge?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 1.1,
-                        ),
+                Row(
+                  children: [
+                    Text(
+                      'ACTIVE REMINDERS',
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: subTextColor,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.1,
                       ),
-                      const Spacer(),
-                      TextButton(
-                        onPressed: _reloadDashboard,
-                        child: const Text('View All'),
-                      ),
-                    ],
-                  ),
+                    ),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: _reloadDashboard,
+                      child: const Text('View All'),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 8),
                 _buildActiveReminders(context),
+                const SizedBox(height: 116),
               ],
             ),
           ),
