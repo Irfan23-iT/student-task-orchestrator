@@ -836,7 +836,7 @@ class _DashboardViewState extends State<DashboardView>
     }) {
       return LayoutBuilder(
         builder: (context, constraints) {
-          final cardHeight = constraints.maxWidth >= 520 ? 164.0 : 156.0;
+          final cardHeight = constraints.maxWidth >= 520 ? 172.0 : 164.0;
 
           return Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -852,34 +852,41 @@ class _DashboardViewState extends State<DashboardView>
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Icon(Icons.check_rounded, color: taskAccent, size: 30),
-                        const SizedBox(height: 18),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            FittedBox(
-                              alignment: Alignment.centerLeft,
-                              fit: BoxFit.scaleDown,
-                              child: Text(
-                                pendingTasksValue,
-                                style: theme.textTheme.displaySmall?.copyWith(
-                                  color: taskAccent,
-                                  fontSize: 38,
-                                  fontWeight: FontWeight.bold,
-                                  height: 0.95,
+                        Flexible(
+                          child: FittedBox(
+                            alignment: Alignment.bottomLeft,
+                            fit: BoxFit.scaleDown,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                FittedBox(
+                                  alignment: Alignment.centerLeft,
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    pendingTasksValue,
+                                    style: theme.textTheme.displaySmall
+                                        ?.copyWith(
+                                          color: taskAccent,
+                                          fontSize: 38,
+                                          fontWeight: FontWeight.bold,
+                                          height: 0.95,
+                                        ),
+                                  ),
                                 ),
-                              ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Tasks Pending',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    color: subTextColor,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Tasks Pending',
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                color: subTextColor,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
                       ],
                     ),
@@ -905,37 +912,45 @@ class _DashboardViewState extends State<DashboardView>
                               color: classAccent,
                               size: 30,
                             ),
-                            const SizedBox(height: 18),
-                            Column(
-                              key: ValueKey<int>(scheduleVersion),
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                FittedBox(
-                                  alignment: Alignment.centerLeft,
-                                  fit: BoxFit.scaleDown,
-                                  child: Text(
-                                    nextClassName,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: theme.textTheme.titleLarge?.copyWith(
-                                      color: classAccent,
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.w800,
-                                      height: 1.2,
+                            Flexible(
+                              child: FittedBox(
+                                alignment: Alignment.bottomLeft,
+                                fit: BoxFit.scaleDown,
+                                child: Column(
+                                  key: ValueKey<int>(scheduleVersion),
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    FittedBox(
+                                      alignment: Alignment.centerLeft,
+                                      fit: BoxFit.scaleDown,
+                                      child: Text(
+                                        nextClassName,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: theme.textTheme.titleLarge
+                                            ?.copyWith(
+                                              color: classAccent,
+                                              fontSize: 22,
+                                              fontWeight: FontWeight.w800,
+                                              height: 1.2,
+                                            ),
+                                      ),
                                     ),
-                                  ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      nextClassSubtitle,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: theme.textTheme.titleMedium
+                                          ?.copyWith(
+                                            color: subTextColor,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  nextClassSubtitle,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.titleMedium?.copyWith(
-                                    color: subTextColor,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ],
+                              ),
                             ),
                           ],
                         ),

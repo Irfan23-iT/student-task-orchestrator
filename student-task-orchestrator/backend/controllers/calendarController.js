@@ -2,7 +2,6 @@ import { supabase } from '../config/supabase.js';
 import {
   completeCalendarOAuth,
   disconnectCalendarForUser,
-  getCalendarCallbackRedirect,
   getCalendarConnectUrl,
   getCalendarStatus,
   rebuildManagedCalendarForUser,
@@ -364,14 +363,11 @@ export const completeCalendarOAuthCallback = async (req, res) => {
   const { code, state, error, error_description: errorDescription } = req.query || {};
 
   if (error) {
-    return res.redirect(
-      302,
-      getCalendarCallbackRedirect('error', errorDescription || String(error))
-    );
+    return res.redirect('rakanstudent://calendar-error');
   }
 
   if (!code || !state) {
-    return res.redirect(302, getCalendarCallbackRedirect('error', 'Missing OAuth callback parameters.'));
+    return res.redirect('rakanstudent://calendar-error');
   }
 
   try {
@@ -380,13 +376,8 @@ export const completeCalendarOAuthCallback = async (req, res) => {
       state: String(state),
       requestId: req.requestId
     });
-    return res
-      .status(200)
-      .type('html')
-      .send(
-        '<html><body><h2>Successfully connected to Google Calendar!</h2><p>You can close this window and return to the app.</p></body></html>'
-      );
+    return res.redirect('rakanstudent://calendar-success');
   } catch (callbackError) {
-    return res.redirect(302, getCalendarCallbackRedirect('error', callbackError.message));
+    return res.redirect('rakanstudent://calendar-error');
   }
 };
