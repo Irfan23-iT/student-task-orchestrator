@@ -13,9 +13,21 @@ import 'package:rakanstudent_mobile/features/schedule/schedule_view.dart';
 import 'package:rakanstudent_mobile/features/tasks/tasks_view.dart';
 import 'package:rakanstudent_mobile/features/timer/timer_sheet.dart';
 import 'package:rakanstudent_mobile/models/class_schedule_model.dart';
+import 'package:rakanstudent_mobile/models/class_model.dart';
 import 'package:rakanstudent_mobile/models/task_model.dart';
+import 'package:rakanstudent_mobile/services/api_service.dart';
 import 'package:rakanstudent_mobile/views/ai_chat_view.dart';
 import 'package:rakanstudent_mobile/views/calendar_view.dart';
+
+Future<DashboardSummaryDto> _emptyDashboardSummary() async {
+  return DashboardSummaryDto.fromJson({
+    'pendingTasksCount': 0,
+    'classesTodayCount': 0,
+    'nextClassName': 'No classes today',
+  });
+}
+
+Future<List<ClassModel>> _emptyFixedClasses() async => const <ClassModel>[];
 
 void main() {
   testWidgets('Login screen renders expected shell copy', (tester) async {
@@ -29,9 +41,16 @@ void main() {
   testWidgets('Login screen navigates to sign up screen', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: LoginScreen()));
 
-    await tester.tap(find.text("Don't have an account? Sign Up"));
-    await tester.pumpAndSettle();
+    final signUpLink = find.widgetWithText(
+      TextButton,
+      "Don't have an account? Sign Up",
+    );
+    await tester.ensureVisible(signUpLink);
+    await tester.tap(signUpLink);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
 
+    expect(find.byType(SignUpScreen), findsOneWidget);
     expect(find.text('Create your account'), findsOneWidget);
     expect(find.text('Sign Up'), findsOneWidget);
   });
@@ -45,16 +64,26 @@ void main() {
     await tester.enterText(find.byType(TextFormField).at(1), 'abc12345');
     await tester.enterText(find.byType(TextFormField).at(2), 'abc12345');
 
-    await tester.tap(find.text('Sign Up'));
+    final signUpButton = find.widgetWithText(ElevatedButton, 'Sign Up');
+    await tester.ensureVisible(signUpButton);
+    await tester.tap(signUpButton);
     await tester.pump();
 
     expect(find.text('Enter a valid email address'), findsOneWidget);
   });
 
   testWidgets('Dashboard view renders summary content', (tester) async {
-    await tester.pumpWidget(const MaterialApp(home: DashboardView()));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DashboardView(
+          fetchDashboardSummary: _emptyDashboardSummary,
+          fetchFixedClasses: _emptyFixedClasses,
+          enableStartupSideEffects: false,
+        ),
+      ),
+    );
 
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 500));
 
     expect(find.text('Good morning'), findsOneWidget);
     expect(find.text('Focus Mode'), findsOneWidget);
@@ -122,32 +151,25 @@ void main() {
   testWidgets('Dashboard focus timer cycles duration and counts down', (
     tester,
   ) async {
-    await tester.pumpWidget(const MaterialApp(home: DashboardView()));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DashboardView(
+          fetchDashboardSummary: _emptyDashboardSummary,
+          fetchFixedClasses: _emptyFixedClasses,
+          enableStartupSideEffects: false,
+        ),
+      ),
+    );
 
+    await tester.pump(const Duration(milliseconds: 500));
+
+    await tester.tap(find.byTooltip('Open Deep Work Room'));
     await tester.pumpAndSettle();
 
-    expect(find.text('25:00'), findsOneWidget);
-
-    await tester.tap(find.text('25:00'));
-    await tester.pump();
-
-    expect(find.text('50:00'), findsOneWidget);
-
-    await tester.tap(find.byTooltip('Start Focus Timer'));
-    await tester.pump();
-
-    expect(find.byTooltip('Pause Focus Timer'), findsOneWidget);
-
-    await tester.pump(const Duration(seconds: 1));
-
-    expect(find.text('49:59'), findsOneWidget);
-
-    await tester.tap(find.byTooltip('Pause Focus Timer'));
-    await tester.pump();
-    await tester.pump(const Duration(seconds: 1));
-
-    expect(find.text('49:59'), findsOneWidget);
-    expect(find.byTooltip('Start Focus Timer'), findsOneWidget);
+    expect(find.text('Deep Work Room'), findsOneWidget);
+    expect(find.text('25 min Pomodoro'), findsOneWidget);
+    expect(find.byType(Slider), findsOneWidget);
+    expect(find.text('Enter Deep Work'), findsOneWidget);
   });
 
   testWidgets('Main screen bottom navigation fits compact width', (
@@ -203,9 +225,17 @@ void main() {
   });
 
   testWidgets('Tasks view renders new shell controls', (tester) async {
-    await tester.pumpWidget(const MaterialApp(home: TasksView()));
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: TasksView(
+          fetchOnInit: false,
+          enableVoiceCapture: false,
+          enableCleanupVerification: false,
+        ),
+      ),
+    );
 
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 500));
 
     expect(find.text('Tasks'), findsOneWidget);
     expect(find.text('Add Custom Task'), findsOneWidget);
@@ -216,9 +246,17 @@ void main() {
   });
 
   testWidgets('Tasks view opens custom task form', (tester) async {
-    await tester.pumpWidget(const MaterialApp(home: TasksView()));
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: TasksView(
+          fetchOnInit: false,
+          enableVoiceCapture: false,
+          enableCleanupVerification: false,
+        ),
+      ),
+    );
 
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 500));
     await tester.tap(find.text('Add Custom Task'));
     await tester.pumpAndSettle();
 

@@ -12,9 +12,18 @@ import '../../services/notification_service.dart';
 import 'voice_capture_widget.dart';
 
 class TasksView extends StatefulWidget {
-  const TasksView({super.key, this.refreshSignal = 0});
+  const TasksView({
+    super.key,
+    this.refreshSignal = 0,
+    @visibleForTesting this.fetchOnInit = true,
+    @visibleForTesting this.enableVoiceCapture = true,
+    @visibleForTesting this.enableCleanupVerification = true,
+  });
 
   final int refreshSignal;
+  final bool fetchOnInit;
+  final bool enableVoiceCapture;
+  final bool enableCleanupVerification;
 
   @override
   State<TasksView> createState() => _TasksViewState();
@@ -32,8 +41,14 @@ class _TasksViewState extends State<TasksView> {
     super.initState();
     NotificationService.instance.initialize();
     ApiService.taskMutationNotifier.addListener(_handleTaskMutation);
-    _fetchTasks();
-    _runCleanupVerification();
+    if (widget.fetchOnInit) {
+      _fetchTasks();
+    } else {
+      _isLoading = false;
+    }
+    if (widget.enableCleanupVerification) {
+      _runCleanupVerification();
+    }
   }
 
   @override
@@ -798,12 +813,14 @@ class _TasksViewState extends State<TasksView> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    VoiceCaptureWidget(
-                      onTaskCreated: (response) {
-                        unawaited(_handleVoiceTaskCreated(response));
-                      },
-                    ),
-                    const SizedBox(height: 16),
+                    if (widget.enableVoiceCapture) ...[
+                      VoiceCaptureWidget(
+                        onTaskCreated: (response) {
+                          unawaited(_handleVoiceTaskCreated(response));
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                     Row(
                       children: [
                         Expanded(
