@@ -6,7 +6,16 @@ import '../../models/class_model.dart';
 import '../../services/api_service.dart';
 
 class ScheduleView extends StatefulWidget {
-  const ScheduleView({super.key});
+  const ScheduleView({
+    super.key,
+    @visibleForTesting this.fetchOnInit = true,
+    @visibleForTesting this.enableScheduleMigrationVerification = true,
+    @visibleForTesting this.fetchFixedClasses,
+  });
+
+  final bool fetchOnInit;
+  final bool enableScheduleMigrationVerification;
+  final Future<List<ClassModel>> Function()? fetchFixedClasses;
 
   @override
   State<ScheduleView> createState() => _ScheduleViewState();
@@ -21,13 +30,23 @@ class _ScheduleViewState extends State<ScheduleView> {
   @override
   void initState() {
     super.initState();
-    _fetchClasses();
-    _runScheduleMigrationTest();
+    if (widget.fetchOnInit) {
+      _fetchClasses();
+    } else {
+      _isLoading = false;
+    }
+    if (widget.enableScheduleMigrationVerification) {
+      _runScheduleMigrationTest();
+    }
+  }
+
+  Future<List<ClassModel>> _loadFixedClasses() {
+    return widget.fetchFixedClasses?.call() ?? _apiService.fetchFixedClasses();
   }
 
   Future<void> _fetchClasses() async {
     try {
-      final classes = await _apiService.fetchFixedClasses();
+      final classes = await _loadFixedClasses();
 
       if (!mounted) {
         return;
@@ -52,7 +71,7 @@ class _ScheduleViewState extends State<ScheduleView> {
   Future<void> _runScheduleMigrationTest() async {
     try {
       print('--- CODEX SCHEDULE MIGRATION TEST START ---');
-      final classes = await _apiService.fetchFixedClasses();
+      final classes = await _loadFixedClasses();
       print(
         '--- CODEX SCHEDULE MIGRATION SUCCESS: Fetched ${classes.length} fixed classes from API ---',
       );
@@ -624,7 +643,7 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
                       ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<int>(
-                        value: _dayValue,
+                        initialValue: _dayValue,
                         decoration: const InputDecoration(
                           labelText: 'Day of Week',
                         ),

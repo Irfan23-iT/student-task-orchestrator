@@ -1,157 +1,120 @@
 # Rakan Student
 
-**Your AI-powered study command center.** Rakan Student is a gamified productivity suite for university students who need one place to capture tasks, plan classes, protect focus time, and stay motivated. It combines a polished Flutter mobile app, a Node.js orchestration backend, Supabase/PostgreSQL persistence, and local-first reward mechanics into a companion that feels closer to a study partner than a plain task list.
+Rakan Student is an AI-native academic task ecosystem built to help students turn scattered coursework, deadlines, revision plans, and focus sessions into an organized daily execution system. It combines a Flutter-first mobile experience, Supabase-backed identity and persistence, a Node.js orchestration backend, Redis-backed run handling, and Gemini-powered AI workflows into one cohesive student productivity platform.
 
-The current feature-freeze build is centered on the Flutter mobile experience: voice-to-task capture, a reactive dashboard, calendar-aware planning, a local Gacha reward loop, and an immersive Deep Work Room designed for distraction-free study sessions.
+The product is designed around a simple principle: students should be able to capture academic intent in the way it naturally appears, whether that is a typed task, an AI chat request, a photographed syllabus, or a focused study session, and have the system translate that intent into structured, actionable work.
 
-## The Flex
+## Product Vision
 
-### Voice-to-Task AI Orchestration
+Rakan Student acts as a personal academic operating system:
 
-Speak a messy reminder, and Rakan Student turns it into structured task data. The mobile app captures speech locally with `speech_to_text`, sends the transcription to the Node.js AI route, and refreshes the task list immediately when the orchestrator creates the new reminder.
+- Capture tasks, deadlines, classes, and reminders from mobile-first flows.
+- Convert unstructured academic inputs into structured task and schedule records.
+- Support deep focus through an immersive Deep Work Room.
+- Reinforce healthy completion loops with a lightweight Gacha token economy.
+- Keep durable academic data in Supabase while allowing fast client-side interaction state where appropriate.
 
-### Gacha-Based Gamification
+## Core Architecture
 
-Completed tasks feed a lightweight local economy. Every three completed tasks earns a token, and tokens can be spent in the Mystery Box to unlock collectible loot. The Gacha controller stays local by design, making the reward loop fast, private, and independent from backend availability.
+The system is composed of four primary layers:
 
-### Immersive Deep Work Room
+- **Flutter Mobile Client**: The main student-facing app for authentication, dashboards, task management, calendar scheduling, camera scanning, Deep Work, and Gacha.
+- **Node.js API Gateway**: The protected backend edge for authenticated REST APIs, task persistence, orchestration lifecycle, analytics, settings, and AI action execution.
+- **AI Orchestration Layer**: Gemini-backed workflows that parse academic intent, normalize output, and execute structured actions.
+- **Supabase + Redis Infrastructure**: Supabase provides Auth, PostgreSQL persistence, and RLS-protected data ownership; Redis Streams supports bounded orchestration run coordination.
 
-The Focus experience has graduated from a basic timer into a full-screen Deep Work Room. Students can choose 15, 25, 45, or 60 minute blocks, tune a custom duration with a slider, and enter a lockdown-style session that uses `wakelock_plus` plus immersive system UI mode to keep the screen awake and the interface calm.
+## Engineering Highlights
 
-### Reactive Dashboard and Calendar Sync
+### Custom Run-Kind Router and State Machine
 
-The dashboard keeps high-signal study context in sync: pending tasks, active reminders, upcoming classes, and calendar markers. Recent fixes ensure the Tasks Pending and Next Class Bento cards listen to the correct state, while the calendar defensively deduplicates overlapping task streams before rendering.
+Rakan Student includes a custom run-kind routing model for orchestration workflows. The backend treats different academic workflows as distinct run kinds, allowing the system to route, persist, poll, retry, and reconcile AI-backed work without collapsing every operation into a generic request-response call.
 
-## Tech Stack
+The architecture uses:
 
-### Mobile
+- **Redis Streams** for event-style run progression, queue-friendly orchestration, and bounded asynchronous handling.
+- **Supabase** as the durable source of truth for user-owned tasks, orchestration runs, calendar data, analytics, and collaboration state.
+- **State-machine style lifecycle handling** for run creation, polling, retry/cancel behavior, and persistence of normalized AI output.
 
-- Flutter and Dart
-- Riverpod and `ValueNotifier` state surfaces
-- Supabase Flutter for auth and data access
-- `http` for backend API calls
-- `speech_to_text` for voice capture
-- `wakelock_plus` for Deep Work Room hardware integration
-- `table_calendar`, `intl`, local notifications, secure storage, and image picking
+This gives the product a scalable orchestration spine instead of a fragile single-shot AI endpoint.
 
-### Backend
+### Camera Scan and Schedule Pipeline
 
-- Node.js with Express 5
-- Supabase JavaScript client
-- PostgreSQL via Supabase
-- Redis integration for backend readiness and supporting workflows
-- Google Gemini SDK packages for AI orchestration routes
+The mobile app supports a native "Snap and Schedule" workflow for academic materials such as syllabi, whiteboards, worksheets, and handwritten notes.
 
-### Data and Architecture
+The pipeline is intentionally cost-efficient and mobile-native:
 
-- Supabase Auth protects user identity.
-- Supabase/PostgreSQL stores profiles, tasks, schedules, reminders, analytics, and workspace data.
-- The Flutter app talks to Supabase directly for selected client-owned flows and to the Node.js API for protected orchestration workflows.
-- The dashboard consumes backend analytics plus schedule data, then maps them into UI-specific summary DTOs.
-- Gacha tokens and loot are intentionally local-only for this feature-freeze release.
+- Flutter captures an image through the device camera.
+- The image is compressed and converted to **Base64** client-side.
+- The backend receives the in-memory payload without requiring Supabase Storage buckets.
+- Gemini Vision parses the image for assignments, exams, milestones, and deadlines.
+- The parsed output is normalized into task actions and persisted through the existing Supabase-backed task model.
 
-> Note: earlier planning referenced `just_audio` for focus soundscapes. The current feature-freeze implementation intentionally dropped the audio requirement, so `just_audio` is not part of the active mobile dependency set unless audio ambience is reintroduced later.
+This turns visual academic clutter into structured calendar and task data without forcing students through a web upload flow.
+
+### Deep Work Room
+
+Rakan Student includes an immersive Deep Work Room for focused study sessions. The Flutter implementation uses `wakelock_plus` so the device can remain awake during intentional focus periods, reducing friction during revision, writing, or timed study blocks.
+
+The Deep Work Room is designed as a dedicated study environment rather than a basic timer. It supports sustained attention, clear entry and exit states, and a more deliberate focus-mode experience inside the mobile app.
+
+### Client-Side Gacha Token Economy
+
+The app includes a client-side Gacha token economy to make academic completion feel more rewarding without coupling motivation mechanics to backend availability.
+
+The current feature-freeze implementation keeps Gacha state local through Riverpod:
+
+- Task completions increment local progress.
+- Every third completion awards a spendable Gacha token.
+- Pulling Gacha consumes one token and rolls against a weighted local loot pool.
+- The reward loop stays fast, private, and resilient even when backend services are unavailable.
+
+This creates a lightweight gamification layer that encourages consistency while keeping durable academic records separate from local motivational state.
+
+## Mobile Feature Set
+
+- Supabase email/password authentication.
+- Dashboard summary for active academic work.
+- Task creation, filtering, completion, and schedule-linked views.
+- Calendar and fixed-class workflows.
+- Camera-based syllabus and deadline scanning.
+- AI orchestration entry points for task planning.
+- Deep Work Room powered by `wakelock_plus`.
+- Gacha rewards driven by local Riverpod state.
+
+## Backend Feature Set
+
+- Authenticated API routes using Supabase bearer tokens.
+- Request-scoped Supabase access for user-owned data.
+- Task, subtask, analytics, notification, calendar, workspace, and orchestration APIs.
+- AI chat and action parsing workflows.
+- Readiness diagnostics for Redis and Supabase dependencies.
+- Run lifecycle support for asynchronous orchestration patterns.
+
+## Technology Stack
+
+- **Mobile**: Flutter, Dart, Riverpod, Supabase Flutter, `image_picker`, `wakelock_plus`, `table_calendar`.
+- **Backend**: Node.js, Express-style API modules, Supabase client integrations.
+- **AI**: Gemini Vision and structured action parsing for academic task generation.
+- **Data**: Supabase Auth, Supabase PostgreSQL, Row Level Security.
+- **Orchestration**: Redis Streams and Supabase-backed run state.
+- **Testing**: Flutter widget/unit tests plus backend Node test coverage.
+
+## Verification Status
+
+The Flutter mobile test suite is stabilized and passing with bounded pumps across the current feature surface. The project currently tracks 35 passing Flutter tests covering core UI entry points, focus flows, Gacha behavior, task behavior, and app-level widget stability.
 
 ## Repository Layout
 
 ```text
 .
-|-- rakanstudent_mobile/              # Flutter mobile app
-|   |-- lib/features/                 # Auth, dashboard, tasks, focus, gacha, profile, schedule
-|   |-- test/                         # Widget and DTO regression tests
-|   |-- android/                      # Android native permissions and runner
-|   `-- ios/                          # iOS native permissions and runner
-|-- student-task-orchestrator/
-|   |-- backend/                      # Node.js Express API
-|   |-- frontend/                     # Web dashboard surface
-|   |-- ai_service/                   # Python AI service workspace
-|   `-- optimizer-service/            # Python optimizer service workspace
-|-- ARCHITECTURE.md
-|-- IMPLEMENTATION_STATUS.md
-`-- README.md
+|-- rakanstudent_mobile/          # Flutter mobile application
+|-- student-task-orchestrator/    # Backend, frontend, services, and migrations
+|-- scripts/                      # Local setup and helper scripts
+|-- ARCHITECTURE.md               # System architecture notes
+|-- FYP_SYSTEM_ARCHITECTURE.md    # Full academic system architecture write-up
+|-- TASK_DOCUMENT.md              # Canonical product and implementation task document
 ```
 
-## Getting Started
+## Summary
 
-### 1. Clone the Repository
-
-```bash
-git clone <your-repository-url>
-cd student-task-orchestrator
-```
-
-### 2. Configure the Flutter App
-
-```bash
-cd rakanstudent_mobile
-flutter pub get
-```
-
-Create a mobile environment file from the example:
-
-```bash
-cp .env.example .env
-```
-
-Fill in the required values for your Supabase project and backend URL. For Android emulator testing, the backend is commonly reached through `http://10.0.2.2:5000/api`.
-
-### 3. Run the Mobile App
-
-```bash
-flutter run
-```
-
-For native voice capture, make sure the platform permissions are present:
-
-- Android: `RECORD_AUDIO`, `INTERNET`, and Bluetooth permission entries in `android/app/src/main/AndroidManifest.xml`.
-- iOS: microphone and speech recognition usage descriptions in `ios/Runner/Info.plist`.
-
-### 4. Start the Backend API
-
-```bash
-cd ../student-task-orchestrator/backend
-npm install
-npm run dev
-```
-
-The backend runs on port `5000` by default and exposes API routes for auth-adjacent workflows, AI chat/actions, tasks, schedule, analytics, settings, workspaces, and health readiness.
-
-### 5. Optional Web Dashboard
-
-```bash
-cd ../frontend
-npm install
-npm run build
-```
-
-## Testing Pipeline
-
-The mobile feature-freeze baseline has a fully green Flutter test suite:
-
-```text
-35/35 widget and DTO tests passing
-```
-
-Run the checks from the Flutter app directory:
-
-```bash
-cd rakanstudent_mobile
-flutter analyze
-flutter test
-```
-
-Current coverage includes:
-
-- Auth shell and validation flows
-- Reactive Dashboard Next Class updates
-- Tasks Pending count behavior
-- Calendar task deduplication
-- Deep Work Room setup controls
-- Local Gacha Mystery Box rendering
-- Tasks, profile, schedule, timer, AI chat, and navigation widget smoke tests
-
-## Feature Freeze Status
-
-Rakan Student is currently stabilized around the mobile experience. The priority is preserving behavior, keeping the UI reactive, and maintaining the green test suite while future work is staged behind clear implementation boundaries.
-
-Planned extension points include richer AI orchestration, optional focus soundscapes, deeper analytics, and expanded collaborative workspace workflows.
+Rakan Student is more than a task list. It is a purpose-built academic execution system that combines AI-native capture, durable task orchestration, mobile-first scheduling, immersive focus tooling, and gamified motivation into a single student-centered ecosystem.

@@ -20,12 +20,16 @@ class TasksView extends ConsumerStatefulWidget {
     @visibleForTesting this.fetchOnInit = true,
     @visibleForTesting this.enableVoiceCapture = true,
     @visibleForTesting this.enableCleanupVerification = true,
+    @visibleForTesting this.fetchTasks,
+    @visibleForTesting this.deleteAllTasks,
   });
 
   final int refreshSignal;
   final bool fetchOnInit;
   final bool enableVoiceCapture;
   final bool enableCleanupVerification;
+  final Future<List<Map<String, dynamic>>> Function()? fetchTasks;
+  final Future<void> Function()? deleteAllTasks;
 
   @override
   ConsumerState<TasksView> createState() => _TasksViewState();
@@ -94,7 +98,7 @@ class _TasksViewState extends ConsumerState<TasksView> {
     }
 
     try {
-      final response = await _apiService.getTasks();
+      final response = await _loadTaskRows();
       final tasks = _dedupeTasks(
         response.map(Task.fromJson).toList(growable: false),
       );
@@ -151,11 +155,19 @@ class _TasksViewState extends ConsumerState<TasksView> {
   Future<void> _runCleanupVerification() async {
     try {
       print('--- CODEX CLEANUP TEST START ---');
-      await _apiService.getTasks();
+      await _loadTaskRows();
       print('--- CODEX CLEANUP SUCCESS: Tasks fetched from API ---');
     } catch (e) {
       print('--- CODEX CLEANUP TEST FAILED: $e ---');
     }
+  }
+
+  Future<List<Map<String, dynamic>>> _loadTaskRows() {
+    return widget.fetchTasks?.call() ?? _apiService.getTasks();
+  }
+
+  Future<void> _deleteAllTaskRows() {
+    return widget.deleteAllTasks?.call() ?? _apiService.deleteAllTasks();
   }
 
   Future<void> _handleVoiceTaskCreated(AiChatResponse response) async {
@@ -472,7 +484,7 @@ class _TasksViewState extends ConsumerState<TasksView> {
     final messenger = ScaffoldMessenger.of(context);
 
     try {
-      await _apiService.deleteAllTasks();
+      await _deleteAllTaskRows();
 
       if (!mounted) {
         return;

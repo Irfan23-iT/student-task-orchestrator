@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:rakanstudent_mobile/core/theme_provider.dart';
 import 'package:rakanstudent_mobile/features/auth/login_screen.dart';
@@ -30,6 +32,25 @@ Future<DashboardSummaryDto> _emptyDashboardSummary() async {
 Future<List<ClassModel>> _emptyFixedClasses() async => const <ClassModel>[];
 
 void main() {
+  setUpAll(() async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          const MethodChannel('plugins.flutter.io/shared_preferences'),
+          (call) async {
+            if (call.method == 'getAll') {
+              return <String, Object>{};
+            }
+
+            return true;
+          },
+        );
+    await Supabase.initialize(
+      url: 'https://test.supabase.co',
+      anonKey: 'test-anon-key',
+    );
+  });
+
   testWidgets('Login screen renders expected shell copy', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: LoginScreen()));
 
@@ -41,14 +62,20 @@ void main() {
   testWidgets('Login screen navigates to sign up screen', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: LoginScreen()));
 
-    final signUpLink = find.widgetWithText(
+    final signUpButtonFinder = find.widgetWithText(
       TextButton,
       "Don't have an account? Sign Up",
     );
-    await tester.ensureVisible(signUpLink);
-    await tester.tap(signUpLink);
-    await tester.pump();
-    await tester.pump(const Duration(seconds: 1));
+    expect(signUpButtonFinder, findsOneWidget);
+
+    await tester.ensureVisible(signUpButtonFinder);
+    await tester.pump(const Duration(milliseconds: 500));
+    final visibleSignUpButtonFinder = signUpButtonFinder.hitTestable();
+    expect(visibleSignUpButtonFinder, findsOneWidget);
+
+    await tester.tap(visibleSignUpButtonFinder);
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 500));
 
     expect(find.byType(SignUpScreen), findsOneWidget);
     expect(find.text('Create your account'), findsOneWidget);
@@ -408,9 +435,16 @@ void main() {
   });
 
   testWidgets('Schedule view renders new shell copy', (tester) async {
-    await tester.pumpWidget(const MaterialApp(home: ScheduleView()));
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: ScheduleView(
+          fetchOnInit: false,
+          enableScheduleMigrationVerification: false,
+        ),
+      ),
+    );
 
-    await tester.pumpAndSettle();
+    await tester.pump();
 
     expect(find.text('Schedule'), findsOneWidget);
     expect(find.text('Your fixed weekly classes'), findsOneWidget);
