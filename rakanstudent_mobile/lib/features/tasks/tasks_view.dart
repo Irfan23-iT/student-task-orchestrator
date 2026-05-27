@@ -19,7 +19,6 @@ class TasksView extends ConsumerStatefulWidget {
     this.refreshSignal = 0,
     @visibleForTesting this.fetchOnInit = true,
     @visibleForTesting this.enableVoiceCapture = true,
-    @visibleForTesting this.enableCleanupVerification = true,
     @visibleForTesting this.fetchTasks,
     @visibleForTesting this.deleteAllTasks,
   });
@@ -27,7 +26,6 @@ class TasksView extends ConsumerStatefulWidget {
   final int refreshSignal;
   final bool fetchOnInit;
   final bool enableVoiceCapture;
-  final bool enableCleanupVerification;
   final Future<List<Map<String, dynamic>>> Function()? fetchTasks;
   final Future<void> Function()? deleteAllTasks;
 
@@ -51,9 +49,6 @@ class _TasksViewState extends ConsumerState<TasksView> {
       _fetchTasks();
     } else {
       _isLoading = false;
-    }
-    if (widget.enableCleanupVerification) {
-      _runCleanupVerification();
     }
   }
 
@@ -150,16 +145,6 @@ class _TasksViewState extends ConsumerState<TasksView> {
     }
 
     return uniqueTasks.values.toList(growable: false);
-  }
-
-  Future<void> _runCleanupVerification() async {
-    try {
-      print('--- CODEX CLEANUP TEST START ---');
-      await _loadTaskRows();
-      print('--- CODEX CLEANUP SUCCESS: Tasks fetched from API ---');
-    } catch (e) {
-      print('--- CODEX CLEANUP TEST FAILED: $e ---');
-    }
   }
 
   Future<List<Map<String, dynamic>>> _loadTaskRows() {

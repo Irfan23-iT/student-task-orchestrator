@@ -9,12 +9,10 @@ class ScheduleView extends StatefulWidget {
   const ScheduleView({
     super.key,
     @visibleForTesting this.fetchOnInit = true,
-    @visibleForTesting this.enableScheduleMigrationVerification = true,
     @visibleForTesting this.fetchFixedClasses,
   });
 
   final bool fetchOnInit;
-  final bool enableScheduleMigrationVerification;
   final Future<List<ClassModel>> Function()? fetchFixedClasses;
 
   @override
@@ -34,9 +32,6 @@ class _ScheduleViewState extends State<ScheduleView> {
       _fetchClasses();
     } else {
       _isLoading = false;
-    }
-    if (widget.enableScheduleMigrationVerification) {
-      _runScheduleMigrationTest();
     }
   }
 
@@ -65,18 +60,6 @@ class _ScheduleViewState extends State<ScheduleView> {
         _classes = const [];
         _isLoading = false;
       });
-    }
-  }
-
-  Future<void> _runScheduleMigrationTest() async {
-    try {
-      print('--- CODEX SCHEDULE MIGRATION TEST START ---');
-      final classes = await _loadFixedClasses();
-      print(
-        '--- CODEX SCHEDULE MIGRATION SUCCESS: Fetched ${classes.length} fixed classes from API ---',
-      );
-    } catch (e) {
-      print('--- CODEX SCHEDULE MIGRATION TEST FAILED: $e ---');
     }
   }
 
