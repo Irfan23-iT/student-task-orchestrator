@@ -5,6 +5,7 @@ import 'package:rakanstudent_mobile/views/calendar_view.dart';
 
 Future<void> testExecutable(FutureOr<void> Function() testMain) async {
   ApiService.enableHealthCheckBypassForTests();
+  ApiService.enableNetworkBypassForTests();
   CalendarView.enableCalendarFetchBypassForTests();
   await testMain();
 }
