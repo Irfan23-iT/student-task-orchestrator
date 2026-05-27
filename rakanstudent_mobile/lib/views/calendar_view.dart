@@ -23,6 +23,13 @@ class CalendarView extends StatefulWidget {
   final List<ClassSchedule> initialClasses;
   final bool fetchOnInit;
 
+  static bool _bypassCalendarFetchForTests = false;
+
+  @visibleForTesting
+  static void enableCalendarFetchBypassForTests() {
+    _bypassCalendarFetchForTests = true;
+  }
+
   @override
   State<CalendarView> createState() => _CalendarViewState();
 }
@@ -174,6 +181,28 @@ class _CalendarViewState extends State<CalendarView> {
           _isLoading = true;
         }
       });
+    }
+
+    if (CalendarView._bypassCalendarFetchForTests) {
+      if (!mounted) {
+        return;
+      }
+
+      final startDate = _monthStart(_focusedDay);
+      final endDate = _monthEnd(_focusedDay);
+      final groupedEvents = _groupCalendarEvents(
+        tasks: widget.initialTasks,
+        classes: widget.initialClasses,
+        startDate: startDate,
+        endDate: endDate,
+      );
+
+      setState(() {
+        _classSchedules = widget.initialClasses;
+        _eventsByDay = groupedEvents;
+        _isLoading = false;
+      });
+      return;
     }
 
     try {

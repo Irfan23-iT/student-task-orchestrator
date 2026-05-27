@@ -34,7 +34,8 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
 
     expect(find.text('No classes today'), findsOneWidget);
 
@@ -51,7 +52,9 @@ void main() {
     ];
     ApiService.scheduleMutationNotifier.value++;
 
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump();
 
     expect(find.text('Software Quality'), findsOneWidget);
   });
@@ -94,7 +97,7 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 500));
 
     expect(find.text('Tasks Pending'), findsOneWidget);
     expect(find.text('3'), findsOneWidget);
