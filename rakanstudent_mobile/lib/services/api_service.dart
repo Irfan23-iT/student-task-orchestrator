@@ -395,6 +395,7 @@ class ApiService {
   );
   static final ValueNotifier<String?> profileNameNotifier =
       ValueNotifier<String?>(null);
+  static bool _bypassHealthCheckForTests = false;
   static String get baseUrl => EnvConfig.apiBaseUrl;
 
   final FlutterSecureStorage _storage;
@@ -410,6 +411,11 @@ class ApiService {
   static void notifyProfileNameChanged(String name) {
     final normalizedName = name.trim();
     profileNameNotifier.value = normalizedName.isEmpty ? null : normalizedName;
+  }
+
+  @visibleForTesting
+  static void enableHealthCheckBypassForTests() {
+    _bypassHealthCheckForTests = true;
   }
 
   static void _logFetch(String url) {
@@ -500,6 +506,10 @@ class ApiService {
   }
 
   Future<http.Response> checkHealth() async {
+    if (_bypassHealthCheckForTests) {
+      return http.Response('{"status":"ok","source":"test-bypass"}', 200);
+    }
+
     final url = '$baseUrl/health';
     _logFetch(url);
     final response = await http
