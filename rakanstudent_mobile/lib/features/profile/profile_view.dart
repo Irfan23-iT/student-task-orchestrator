@@ -265,6 +265,13 @@ class _ProfileViewState extends ConsumerState<ProfileView>
 
     try {
       await _apiService.syncCalendar();
+      final userId = _currentUser()?.id;
+      if (userId == null || userId.isEmpty) {
+        throw StateError(
+          'Current user id is unavailable for calendar rebuild.',
+        );
+      }
+      await _apiService.rebuildCalendarSchedule(userId);
       if (!mounted) return;
 
       await _loadCalendarStatus();
@@ -401,6 +408,7 @@ class _ProfileViewState extends ConsumerState<ProfileView>
               ),
             ),
             const SizedBox(height: 20),
+            
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(

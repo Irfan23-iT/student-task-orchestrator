@@ -1715,6 +1715,51 @@ class ApiService {
     await syncCalendar();
   }
 
+  Future<void> rebuildCalendarSchedule(String userId) async {
+    if (_isFlutterTestEnvironment) {
+      return;
+    }
+
+    final session = Supabase.instance.client.auth.currentSession;
+    final token = session?.accessToken ?? await _getValidAccessToken();
+    final headers = _jsonHeaders(token: token);
+    debugPrint(
+      '[ApiService] POST $baseUrl/calendar/rebuild -> request for user $userId',
+    );
+
+    var response = await http
+        .post(Uri.parse('$baseUrl/calendar/rebuild'), headers: headers)
+        .timeout(const Duration(seconds: 8));
+
+    if (response.statusCode == 401) {
+      final refreshedToken = await _getValidAccessToken(forceRefresh: true);
+      response = await http
+          .post(
+            Uri.parse('$baseUrl/calendar/rebuild'),
+            headers: {
+              'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true',
+              if (refreshedToken != null)
+                'Authorization': 'Bearer $refreshedToken',
+            },
+          )
+          .timeout(const Duration(seconds: 8));
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      debugPrint(
+        '[ApiService] POST $baseUrl/calendar/rebuild -> ${response.statusCode}',
+      );
+      throw Exception(
+        'Calendar rebuild failed: ${response.statusCode} ${response.body}',
+      );
+    }
+
+    debugPrint(
+      '[ApiService] POST $baseUrl/calendar/rebuild -> ${response.statusCode}',
+    );
+  }
+
   Future<void> saveFixedClass(ClassModel newClass) async {
     final headers = await _getHeaders();
     final body = {
