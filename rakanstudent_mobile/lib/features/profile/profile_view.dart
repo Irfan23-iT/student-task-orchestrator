@@ -16,7 +16,8 @@ class ProfileView extends ConsumerStatefulWidget {
   ConsumerState<ProfileView> createState() => _ProfileViewState();
 }
 
-class _ProfileViewState extends ConsumerState<ProfileView> {
+class _ProfileViewState extends ConsumerState<ProfileView>
+    with WidgetsBindingObserver {
   final ApiService _apiService = ApiService();
 
   bool? _isCalendarConnected;
@@ -24,6 +25,7 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     ApiService.profileNameNotifier.addListener(_handleProfileNameChanged);
     _loadCalendarStatus();
     _loadProfileName();
@@ -31,8 +33,16 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     ApiService.profileNameNotifier.removeListener(_handleProfileNameChanged);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _loadCalendarStatus();
+    }
   }
 
   void _handleProfileNameChanged() {

@@ -1615,6 +1615,7 @@ class ApiService {
     }
 
     final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    print('[ApiService] Calendar status JSON received: $decoded');
     return decoded['connected'] == true;
   }
 

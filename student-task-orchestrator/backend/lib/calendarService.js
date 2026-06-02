@@ -831,14 +831,31 @@ export const completeCalendarOAuth = async ({ code, state, requestId } = {}) => 
     .select('*')
     .single();
 
-  if (error) throw error;
+  if (error) {
+    log('error', 'Calendar OAuth connection save failed', {
+      requestId: getRequestId(requestId),
+      userId: parsedState.userId,
+      provider: 'google',
+      error
+    });
+    throw error;
+  }
 
   log('info', 'Calendar OAuth completed', {
     requestId: getRequestId(requestId),
     userId: parsedState.userId
   });
 
-  await syncCalendarForUser({ userId: parsedState.userId, rebuildManaged: true, requestId });
+  try {
+    await syncCalendarForUser({ userId: parsedState.userId, rebuildManaged: true, requestId });
+  } catch (syncError) {
+    log('warn', 'Calendar OAuth saved but initial sync failed', {
+      requestId: getRequestId(requestId),
+      userId: parsedState.userId,
+      error: syncError
+    });
+  }
+
   return data;
 };
 

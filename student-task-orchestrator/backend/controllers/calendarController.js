@@ -282,7 +282,10 @@ export const deleteFixedClass = async (req, res) => {
 export const getCalendarIntegrationStatus = async (req, res) => {
   try {
     const status = await getCalendarStatus({ userId: req.user.id });
-    res.status(200).json(status);
+    res.status(200).json({
+      ...status,
+      connected: status.connected === true
+    });
   } catch (error) {
     console.error('Calendar Status Failed:', error.message, 'User:', req.user?.id);
     res.status(500).json({
@@ -378,6 +381,11 @@ export const completeCalendarOAuthCallback = async (req, res) => {
     });
     return res.redirect('rakanstudent://calendar-success');
   } catch (callbackError) {
+    console.error('Calendar OAuth Callback Failed:', callbackError.message, {
+      requestId: req.requestId,
+      hasCode: Boolean(code),
+      hasState: Boolean(state)
+    });
     return res.redirect('rakanstudent://calendar-error');
   }
 };
