@@ -626,7 +626,7 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
                       ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<int>(
-                        value: _dayValue,
+                        initialValue: _dayValue,
                         decoration: const InputDecoration(
                           labelText: 'Day of Week',
                         ),

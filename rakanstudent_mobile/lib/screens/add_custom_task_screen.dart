@@ -202,7 +202,7 @@ class _AddCustomTaskScreenState extends State<AddCustomTaskScreen> {
             ),
             const SizedBox(height: 14),
             DropdownButtonFormField<String>(
-              value: _priority,
+              initialValue: _priority,
               decoration: const InputDecoration(
                 labelText: 'Priority',
                 border: OutlineInputBorder(),

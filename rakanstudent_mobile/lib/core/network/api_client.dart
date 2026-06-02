@@ -48,6 +48,7 @@ class ApiClient {
     final uri = Uri.parse('${EnvConfig.apiBaseUrl}$path');
     final headers = <String, String>{
       'Content-Type': 'application/json',
+      'ngrok-skip-browser-warning': 'true',
       if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
     };
 

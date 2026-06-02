@@ -461,6 +461,7 @@ class ApiService {
   Map<String, String> _jsonHeaders({String? token}) {
     return {
       'Content-Type': 'application/json',
+      'ngrok-skip-browser-warning': 'true',
       if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
     };
   }
@@ -549,7 +550,7 @@ class ApiService {
     final url = '$baseUrl/health';
     _logFetch(url);
     final response = await http
-        .get(Uri.parse(url))
+        .get(Uri.parse(url), headers: _jsonHeaders())
         .timeout(const Duration(seconds: 5));
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -609,6 +610,7 @@ class ApiService {
             Uri.parse(url),
             headers: {
               'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true',
               if (refreshedToken != null)
                 'Authorization': 'Bearer $refreshedToken',
             },
@@ -651,6 +653,7 @@ class ApiService {
             Uri.parse(url),
             headers: {
               'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true',
               if (refreshedToken != null)
                 'Authorization': 'Bearer $refreshedToken',
             },
@@ -685,6 +688,7 @@ class ApiService {
             Uri.parse('$baseUrl/analytics/overview'),
             headers: {
               'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true',
               if (refreshedToken != null)
                 'Authorization': 'Bearer $refreshedToken',
             },
@@ -769,6 +773,7 @@ class ApiService {
             Uri.parse('$baseUrl/analytics/reminders'),
             headers: {
               'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true',
               if (refreshedToken != null)
                 'Authorization': 'Bearer $refreshedToken',
             },
@@ -803,6 +808,7 @@ class ApiService {
             Uri.parse('$baseUrl/analytics/reminders/$reminderId'),
             headers: {
               'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true',
               if (refreshedToken != null)
                 'Authorization': 'Bearer $refreshedToken',
             },
@@ -835,6 +841,7 @@ class ApiService {
             Uri.parse('$baseUrl/settings/profile'),
             headers: {
               'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true',
               if (refreshedToken != null)
                 'Authorization': 'Bearer $refreshedToken',
             },
@@ -869,6 +876,7 @@ class ApiService {
             Uri.parse('$baseUrl/settings/profile'),
             headers: {
               'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true',
               if (refreshedToken != null)
                 'Authorization': 'Bearer $refreshedToken',
             },
@@ -903,6 +911,7 @@ class ApiService {
             Uri.parse('$baseUrl/settings/profile'),
             headers: {
               'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true',
               if (refreshedToken != null)
                 'Authorization': 'Bearer $refreshedToken',
             },
@@ -966,6 +975,7 @@ class ApiService {
             Uri.parse(url),
             headers: {
               'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true',
               if (refreshedToken != null)
                 'Authorization': 'Bearer $refreshedToken',
             },
@@ -1012,6 +1022,7 @@ class ApiService {
             uri,
             headers: {
               'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true',
               if (refreshedToken != null)
                 'Authorization': 'Bearer $refreshedToken',
             },
@@ -1060,6 +1071,7 @@ class ApiService {
             uri,
             headers: {
               'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true',
               if (refreshedToken != null)
                 'Authorization': 'Bearer $refreshedToken',
             },
@@ -1105,6 +1117,7 @@ class ApiService {
             Uri.parse(url),
             headers: {
               'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true',
               if (refreshedToken != null)
                 'Authorization': 'Bearer $refreshedToken',
             },
@@ -1144,6 +1157,7 @@ class ApiService {
             Uri.parse(url),
             headers: {
               'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true',
               if (refreshedToken != null)
                 'Authorization': 'Bearer $refreshedToken',
             },
@@ -1272,6 +1286,7 @@ class ApiService {
             Uri.parse('$baseUrl/tasks/subtasks/$id'),
             headers: {
               'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true',
               if (refreshedToken != null)
                 'Authorization': 'Bearer $refreshedToken',
             },
@@ -1309,6 +1324,7 @@ class ApiService {
             Uri.parse('$baseUrl/tasks'),
             headers: {
               'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true',
               if (refreshedToken != null)
                 'Authorization': 'Bearer $refreshedToken',
             },
@@ -1344,6 +1360,7 @@ class ApiService {
             uri,
             headers: {
               'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true',
               if (refreshedToken != null)
                 'Authorization': 'Bearer $refreshedToken',
             },
@@ -1379,6 +1396,7 @@ class ApiService {
             Uri.parse('$baseUrl/ai/orchestrate'),
             headers: {
               'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true',
               if (refreshedToken != null)
                 'Authorization': 'Bearer $refreshedToken',
             },
@@ -1424,6 +1442,7 @@ class ApiService {
             Uri.parse('$baseUrl/tasks/save-run'),
             headers: {
               'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true',
               if (refreshedToken != null)
                 'Authorization': 'Bearer $refreshedToken',
             },
@@ -1465,6 +1484,7 @@ class ApiService {
             Uri.parse('$baseUrl/orchestration/runs'),
             headers: {
               'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true',
               if (refreshedToken != null)
                 'Authorization': 'Bearer $refreshedToken',
             },
@@ -1500,6 +1520,7 @@ class ApiService {
             Uri.parse(url),
             headers: {
               'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true',
               if (refreshedToken != null)
                 'Authorization': 'Bearer $refreshedToken',
             },
@@ -1540,6 +1561,7 @@ class ApiService {
             Uri.parse(url),
             headers: {
               'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true',
               if (refreshedToken != null)
                 'Authorization': 'Bearer $refreshedToken',
             },
@@ -1578,6 +1600,7 @@ class ApiService {
             Uri.parse('$baseUrl/calendar/status'),
             headers: {
               'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true',
               if (refreshedToken != null)
                 'Authorization': 'Bearer $refreshedToken',
             },
@@ -1712,6 +1735,7 @@ class ApiService {
             Uri.parse('$baseUrl/calendar/fixed-classes/bulk'),
             headers: {
               'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true',
               if (refreshedToken != null)
                 'Authorization': 'Bearer $refreshedToken',
             },
@@ -1749,6 +1773,7 @@ class ApiService {
             uri,
             headers: {
               'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true',
               if (refreshedToken != null)
                 'Authorization': 'Bearer $refreshedToken',
             },
@@ -1782,6 +1807,7 @@ class ApiService {
             Uri.parse('$baseUrl/workspaces/overview'),
             headers: {
               'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true',
               if (refreshedToken != null)
                 'Authorization': 'Bearer $refreshedToken',
             },
@@ -1822,6 +1848,7 @@ class ApiService {
             Uri.parse('$baseUrl/workspaces'),
             headers: {
               'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true',
               if (refreshedToken != null)
                 'Authorization': 'Bearer $refreshedToken',
             },
@@ -1856,6 +1883,7 @@ class ApiService {
             Uri.parse('$baseUrl/workspaces/join'),
             headers: {
               'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true',
               if (refreshedToken != null)
                 'Authorization': 'Bearer $refreshedToken',
             },
@@ -1885,6 +1913,7 @@ class ApiService {
             Uri.parse('$baseUrl/workspaces/$id/share'),
             headers: {
               'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true',
               if (refreshedToken != null)
                 'Authorization': 'Bearer $refreshedToken',
             },

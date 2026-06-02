@@ -70,8 +70,8 @@ class EnvConfig {
 
   static Future<String> _readApiBaseUrl() async {
     final configuredUrl =
-        _readEnv('API_URL') ??
         _readEnv('MOBILE_API_BASE_URL') ??
+        _readEnv('API_URL') ??
         _readEnv('API_BASE_URL');
 
     if (kIsWeb) {
