@@ -25,10 +25,10 @@ const normalizePriorityLevel = (value) => {
 
 const normalizeTaskStatus = (value) => {
   const normalized = String(value ?? 'pending').trim().toLowerCase();
-  if (normalized === 'completed') return 'completed';
-  if (normalized === 'archived') return 'archived';
-  if (normalized === 'in progress' || normalized === 'in_progress') return 'in_progress';
-  return 'pending';
+  if (normalized === 'completed' || normalized === 'done') return 'DONE';
+  if (normalized === 'cancelled' || normalized === 'canceled' || normalized === 'archived') return 'DONE';
+  if (normalized === 'in progress' || normalized === 'in_progress') return 'IN_PROGRESS';
+  return 'TODO';
 };
 
 const normalizeTaskType = (value) => {

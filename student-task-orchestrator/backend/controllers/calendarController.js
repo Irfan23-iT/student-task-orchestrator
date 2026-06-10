@@ -61,23 +61,48 @@ const normalizeClassType = (value) => {
   return compactTypes[normalized.toLowerCase()] || normalized || 'Lect';
 };
 
-const normalizeClassPayload = (item = {}) => ({
-  day_of_week: normalizeDayOfWeek(item.day_of_week ?? item.dayOfWeek),
-  start_time: String(item.start_time ?? item.startTime ?? '').trim(),
-  end_time: String(item.end_time ?? item.endTime ?? '').trim(),
-  class_name: String(item.class_name ?? item.className ?? '').trim(),
-  class_type: normalizeClassType(item.class_type ?? item.classType)
-});
-
 const parseTimeToMinutes = (value) => {
-  const match = String(value || '').trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  const match = String(value || '').trim().match(/^(\d{1,2})[:.](\d{2})(?::\d{2})?\s*(AM|PM)?$/i);
   if (!match) return null;
 
-  const hours = Number.parseInt(match[1], 10);
+  let hours = Number.parseInt(match[1], 10);
   const minutes = Number.parseInt(match[2], 10);
+  const meridiem = match[3]?.toUpperCase();
+  if (meridiem === 'PM' && hours < 12) hours += 12;
+  if (meridiem === 'AM' && hours === 12) hours = 0;
   if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
 
   return hours * 60 + minutes;
+};
+
+const formatMinutesAsTime = (value) => {
+  const normalized = ((value % 1440) + 1440) % 1440;
+  const hours = Math.floor(normalized / 60);
+  const minutes = normalized % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
+};
+
+const normalizeTimeForStorage = (value, fallbackMinutes) => {
+  const parsed = parseTimeToMinutes(value);
+  return formatMinutesAsTime(parsed ?? fallbackMinutes);
+};
+
+const normalizeClassPayload = (item = {}) => {
+  const rawStartTime = String(item.start_time ?? item.startTime ?? '').trim();
+  const rawEndTime = String(item.end_time ?? item.endTime ?? '').trim();
+  const startMinutes = parseTimeToMinutes(rawStartTime) ?? 8 * 60;
+  const parsedEndMinutes = parseTimeToMinutes(rawEndTime);
+  const endMinutes = parsedEndMinutes != null && parsedEndMinutes > startMinutes
+    ? parsedEndMinutes
+    : startMinutes + 60;
+
+  return {
+    day_of_week: normalizeDayOfWeek(item.day_of_week ?? item.dayOfWeek),
+    start_time: normalizeTimeForStorage(rawStartTime, startMinutes),
+    end_time: formatMinutesAsTime(endMinutes),
+    class_name: String(item.class_name ?? item.className ?? '').trim(),
+    class_type: normalizeClassType(item.class_type ?? item.classType)
+  };
 };
 
 const hasTimeOverlap = (left, right) =>
@@ -314,6 +339,7 @@ export const syncCalendarIntegration = async (req, res) => {
   try {
     const status = await syncCalendarForUser({
       userId: req.user.id,
+      rebuildManaged: true,
       requestId: req.requestId
     });
     res.status(200).json(status);

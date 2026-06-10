@@ -378,18 +378,18 @@ class _ProfileViewState extends ConsumerState<ProfileView>
     final colorScheme = theme.colorScheme;
     final calendarConnected = _isCalendarConnected == true;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? Colors.black : const Color(0xFFF5F5F7);
-    final cardColor = isDark ? const Color(0xFF1A1A1A) : Colors.white;
-    final textColor = isDark ? Colors.white : Colors.black;
+    final bgColor = isDark ? Colors.black : const Color(0xFFF4F0FF);
+    final cardColor = isDark ? const Color(0xFF111827) : Colors.white;
+    final textColor = isDark ? Colors.white : const Color(0xFF111827);
     final subTextColor = isDark ? Colors.grey[400] : Colors.grey[600];
     final shadow =
         isDark
             ? <BoxShadow>[]
             : [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 24,
-                offset: const Offset(0, 8),
+                color: const Color(0xFF4C1D95).withValues(alpha: 0.08),
+                blurRadius: 30,
+                offset: const Offset(0, 14),
               ),
             ];
 
@@ -398,22 +398,26 @@ class _ProfileViewState extends ConsumerState<ProfileView>
       body: SafeArea(
         bottom: false,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(24, 24, 24, 140),
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 140),
           children: [
-            Text(
-              'Profile',
-              style: theme.textTheme.headlineMedium?.copyWith(
-                color: textColor,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 20),
-            
             Container(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: cardColor,
-                borderRadius: BorderRadius.circular(32),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors:
+                      isDark
+                          ? const [Color(0xFF080B18), Color(0xFF241044)]
+                          : const [Color(0xFFFFFFFF), Color(0xFFEDE7FF)],
+                ),
+                borderRadius: BorderRadius.circular(34),
+                border: Border.all(
+                  color:
+                      isDark
+                          ? Colors.white.withValues(alpha: 0.08)
+                          : Colors.white.withValues(alpha: 0.72),
+                ),
                 boxShadow: shadow,
               ),
               child: Row(
@@ -423,8 +427,12 @@ class _ProfileViewState extends ConsumerState<ProfileView>
                     width: 74,
                     height: 74,
                     decoration: BoxDecoration(
-                      color: colorScheme.primary,
-                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [colorScheme.primary, const Color(0xFF20E3B2)],
+                      ),
+                      borderRadius: BorderRadius.circular(26),
                     ),
                     alignment: Alignment.center,
                     child: Text(
@@ -440,6 +448,15 @@ class _ProfileViewState extends ConsumerState<ProfileView>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        Text(
+                          'Profile',
+                          style: theme.textTheme.labelLarge?.copyWith(
+                            color: subTextColor,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
                         Row(
                           children: [
                             Expanded(
@@ -481,7 +498,7 @@ class _ProfileViewState extends ConsumerState<ProfileView>
                 ],
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 18),
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(

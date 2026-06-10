@@ -218,7 +218,13 @@ const googleCalendarRequest = async (path, { accessToken, method = 'GET', body, 
   const url = new URL(`${GOOGLE_CALENDAR_API_BASE}${path}`);
   if (query) {
     Object.entries(query).forEach(([key, value]) => {
-      if (value != null) {
+      if (Array.isArray(value)) {
+        value.forEach((entry) => {
+          if (entry != null) {
+            url.searchParams.append(key, String(entry));
+          }
+        });
+      } else if (value != null) {
         url.searchParams.set(key, String(value));
       }
     });
@@ -530,6 +536,24 @@ const fetchScheduledTasks = async (userId) => {
   return data || [];
 };
 
+const fetchDueStandardTasks = async (userId) => {
+  const { start, end } = queryWindow();
+
+  const { data, error } = await supabase
+    .from('tasks')
+    .select('id, title, description, due_date, priority_level, status')
+    .eq('user_id', userId)
+    .not('due_date', 'is', null)
+    .gte('due_date', start.toISOString())
+    .lte('due_date', end.toISOString())
+    .order('due_date', { ascending: true });
+
+  if (error) throw error;
+  return (data || []).filter(
+    (task) => !['completed', 'archived'].includes(String(task.status || '').trim().toLowerCase())
+  );
+};
+
 const isWritableCalendar = (calendar) => ['owner', 'writer'].includes(calendar?.access_role);
 
 const selectManagedCalendar = (calendars = []) =>
@@ -572,6 +596,76 @@ const deleteGoogleEventIfPresent = async (accessToken, calendarId, externalEvent
   }
 };
 
+const findExistingStandardTaskEvents = async ({ accessToken, calendarId, taskId, timeMin, timeMax }) => {
+  const payload = await googleCalendarRequest(`/calendars/${encodeURIComponent(calendarId)}/events`, {
+    accessToken,
+    query: {
+      privateExtendedProperty: [
+        `managedBy=${MANAGED_EVENT_SOURCE}`,
+        'taskTable=tasks',
+        `taskId=${taskId}`
+      ],
+      singleEvents: true,
+      showDeleted: false,
+      timeMin,
+      timeMax
+    }
+  });
+
+  return payload?.items || [];
+};
+
+const syncStandardTaskEvents = async ({ connection, calendar, timeZone }) => {
+  const tasks = await fetchDueStandardTasks(connection.user_id);
+  const { start, end } = queryWindow();
+  const timeMin = start.toISOString();
+  const timeMax = end.toISOString();
+  let syncedCount = 0;
+
+  for (const task of tasks) {
+    const payload = buildStandardTaskEventPayload(task, calendar.time_zone || timeZone);
+    if (!payload) continue;
+
+    const existingEvents = await findExistingStandardTaskEvents({
+      accessToken: connection.access_token,
+      calendarId: calendar.external_calendar_id,
+      taskId: task.id,
+      timeMin,
+      timeMax
+    });
+    const [firstEvent, ...duplicateEvents] = existingEvents;
+
+    if (firstEvent?.id) {
+      await googleCalendarRequest(
+        `/calendars/${encodeURIComponent(calendar.external_calendar_id)}/events/${encodeURIComponent(firstEvent.id)}`,
+        {
+          accessToken: connection.access_token,
+          method: 'PUT',
+          body: payload
+        }
+      );
+    } else {
+      await googleCalendarRequest(`/calendars/${encodeURIComponent(calendar.external_calendar_id)}/events`, {
+        accessToken: connection.access_token,
+        method: 'POST',
+        body: payload
+      });
+    }
+
+    for (const duplicateEvent of duplicateEvents) {
+      await deleteGoogleEventIfPresent(
+        connection.access_token,
+        calendar.external_calendar_id,
+        duplicateEvent.id
+      );
+    }
+
+    syncedCount += 1;
+  }
+
+  return { syncedCount };
+};
+
 const rebuildManagedEventsInternal = async ({ connection, calendars, timeZone, requestId }) => {
   const hydratedConnection = await ensureFreshConnection(connection);
   const targetCalendar = selectManagedCalendar(calendars);
@@ -579,6 +673,11 @@ const rebuildManagedEventsInternal = async ({ connection, calendars, timeZone, r
     throw new Error('No writable Google calendar available.');
   }
 
+  const standardTasks = await syncStandardTaskEvents({
+    connection: hydratedConnection,
+    calendar: targetCalendar,
+    timeZone
+  });
   const scheduledTasks = await fetchScheduledTasks(hydratedConnection.user_id);
   const existingRows = await fetchManagedEventRows(hydratedConnection.user_id);
   const existingBySubTaskId = new Map(existingRows.map((row) => [row.sub_task_id, row]));
@@ -661,12 +760,14 @@ const rebuildManagedEventsInternal = async ({ connection, calendars, timeZone, r
     requestId: getRequestId(requestId),
     userId: hydratedConnection.user_id,
     taskCount: nextRows.length,
+    standardTaskCount: standardTasks.syncedCount,
     removedCount: staleRows.length
   });
 
   return {
     targetCalendarId: targetCalendar.external_calendar_id,
     syncedCount: nextRows.length,
+    standardTaskCount: standardTasks.syncedCount,
     removedCount: staleRows.length
   };
 };

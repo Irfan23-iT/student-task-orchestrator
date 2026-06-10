@@ -42,8 +42,7 @@ class ApiClient {
     Object? body,
     bool hasRetried = false,
   }) async {
-    final session = _supabaseClient.auth.currentSession;
-    final token = session?.accessToken;
+    final token = await _getValidAccessToken(forceRefresh: hasRetried);
 
     final uri = Uri.parse('${EnvConfig.apiBaseUrl}$path');
     final headers = <String, String>{
@@ -89,15 +88,6 @@ class ApiClient {
 
     final requestId = response.headers['x-request-id'];
     if (response.statusCode == 401 && !hasRetried) {
-      final refreshed = await _supabaseClient.auth.refreshSession();
-      if (refreshed.session == null) {
-        await _supabaseClient.auth.signOut();
-        throw const AppError(
-          message: 'Unauthorized',
-          details: 'Please sign in again.',
-        );
-      }
-
       return _sendRequest(method, path, body: body, hasRetried: true);
     }
 
@@ -114,6 +104,30 @@ class ApiClient {
       body: response.body,
       requestId: requestId,
     );
+  }
+
+  Future<String?> _getValidAccessToken({bool forceRefresh = false}) async {
+    final session = _supabaseClient.auth.currentSession;
+    if (session == null) {
+      return null;
+    }
+
+    final nowInSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final expiresAt = session.expiresAt;
+    final shouldRefresh =
+        forceRefresh || (expiresAt != null && expiresAt <= nowInSeconds + 30);
+    if (!shouldRefresh) {
+      return session.accessToken;
+    }
+
+    try {
+      final refreshed = await _supabaseClient.auth.refreshSession();
+      return refreshed.session?.accessToken ??
+          _supabaseClient.auth.currentSession?.accessToken;
+    } on AuthException {
+      await _supabaseClient.auth.signOut();
+      return null;
+    }
   }
 }
 

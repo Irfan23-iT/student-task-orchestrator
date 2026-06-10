@@ -79,6 +79,10 @@ class GachaController extends StateNotifier<GachaState> {
     state = state.copyWith(tokens: state.tokens + count);
   }
 
+  void awardPremiumToken() {
+    addTokens(1);
+  }
+
   GachaPrize? pullGacha() {
     if (state.tokens <= 0) {
       return null;

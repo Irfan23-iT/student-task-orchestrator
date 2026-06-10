@@ -563,6 +563,7 @@ export const upsertPushSubscription = async (req, res) => {
     const payload = normalizePushSubscriptionPayload(req.body || {});
 
     assert(payload.endpoint.length > 0, 'Push endpoint is required.');
+    assert(payload.provider === 'web', 'Push provider is invalid.');
     assert(payload.p256dh.length > 0, 'Push key p256dh is required.');
     assert(payload.auth.length > 0, 'Push auth key is required.');
     assert(
@@ -588,9 +589,11 @@ export const upsertPushSubscription = async (req, res) => {
       .upsert(
         {
           user_id: userId,
+          provider: payload.provider,
           endpoint: payload.endpoint,
           p256dh: payload.p256dh,
           auth: payload.auth,
+          device_platform: payload.devicePlatform || null,
           user_agent: req.get('user-agent') || null
         },
         { onConflict: 'endpoint' }

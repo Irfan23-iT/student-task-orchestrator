@@ -1,5 +1,6 @@
 import { supabase } from '../config/supabase.js';
 import { getCalendarIntegrationCapabilities } from './calendarService.js';
+import { getDriveIntegrationCapabilities } from './driveService.js';
 import { getErrorTrackingCapabilities } from './errorTracking.js';
 import { getNotificationDeliveryCapabilities } from './notificationService.js';
 import { getRedis, getRedisConnectionConfig } from './redis.js';
@@ -47,6 +48,7 @@ const GOOGLE_ENV_KEYS = [
   'GOOGLE_CLIENT_SECRET',
   'GOOGLE_CALENDAR_REDIRECT_URI'
 ];
+const DRIVE_ENV_KEYS = ['GOOGLE_DRIVE_REDIRECT_URI'];
 const EMAIL_ENV_KEYS = ['NOTIFICATION_EMAIL_WEBHOOK_URL', 'RESEND_API_KEY'];
 const PUSH_ENV_KEYS = ['NOTIFICATION_PUSH_WEBHOOK_URL', 'VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY'];
 const ERROR_TRACKING_ENV_KEYS = ['ERROR_TRACKING_WEBHOOK_URL'];
@@ -104,12 +106,14 @@ export const buildSystemReadinessReport = ({
   redisReachable = true,
   redisError = '',
   calendarConfigured = false,
+  driveConfigured = false,
   emailConfigured = false,
   serverPushConfigured = false,
   errorTrackingConfigured = false,
   redisUrl = getRedisConnectionConfig().url,
   redisUsingDefaultUrl = getRedisConnectionConfig().usingDefaultUrl,
   missingCalendarEnv = findMissingEnv(GOOGLE_ENV_KEYS),
+  missingDriveEnv = findMissingEnv(DRIVE_ENV_KEYS),
   missingEmailEnv = findMissingEnv(EMAIL_ENV_KEYS),
   missingPushEnv = findMissingEnv(PUSH_ENV_KEYS),
   missingErrorTrackingEnv = findMissingEnv(ERROR_TRACKING_ENV_KEYS)
@@ -170,6 +174,19 @@ export const buildSystemReadinessReport = ({
     },
     {
       ...buildCheck({
+        key: 'drive',
+        label: 'Google Drive',
+        ok: driveConfigured,
+        detail: driveConfigured
+          ? 'OAuth configured.'
+          : `Missing ${formatEnvList(missingDriveEnv)}.`,
+        required: false
+      }),
+      missingEnv: driveConfigured ? [] : missingDriveEnv,
+      nextStep: driveConfigured ? '' : `Set ${formatEnvList(missingDriveEnv)} for Google Drive OAuth.`
+    },
+    {
+      ...buildCheck({
         key: 'email',
         label: 'Email reminders',
         ok: emailConfigured,
@@ -213,10 +230,12 @@ export const buildSystemReadinessReport = ({
 
 export const getSystemReadinessSnapshot = async () => {
   const calendarCapabilities = getCalendarIntegrationCapabilities();
+  const driveCapabilities = getDriveIntegrationCapabilities();
   const notificationCapabilities = getNotificationDeliveryCapabilities();
   const errorTrackingCapabilities = getErrorTrackingCapabilities();
   const redisConfig = getRedisConnectionConfig();
   const missingCalendarEnv = findMissingEnv(GOOGLE_ENV_KEYS);
+  const missingDriveEnv = findMissingEnv(DRIVE_ENV_KEYS);
   const missingEmailEnv = findMissingEnv(EMAIL_ENV_KEYS);
   const missingPushEnv = findMissingEnv(PUSH_ENV_KEYS);
   const missingErrorTrackingEnv = findMissingEnv(ERROR_TRACKING_ENV_KEYS);
@@ -244,12 +263,14 @@ export const getSystemReadinessSnapshot = async () => {
     redisReachable: redisHealth.ok,
     redisError: redisHealth.error,
     calendarConfigured: calendarCapabilities.configured,
+    driveConfigured: driveCapabilities.configured,
     emailConfigured: notificationCapabilities.emailConfigured,
     serverPushConfigured: notificationCapabilities.serverPushConfigured,
     errorTrackingConfigured: errorTrackingCapabilities.configured,
     redisUrl: redisConfig.url,
     redisUsingDefaultUrl: redisConfig.usingDefaultUrl,
     missingCalendarEnv,
+    missingDriveEnv,
     missingEmailEnv,
     missingPushEnv,
     missingErrorTrackingEnv

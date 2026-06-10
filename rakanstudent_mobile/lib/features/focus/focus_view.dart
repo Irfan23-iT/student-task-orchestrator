@@ -2,21 +2,24 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
-class FocusView extends StatefulWidget {
+import '../gacha/gacha_controller.dart';
+
+class FocusView extends ConsumerStatefulWidget {
   const FocusView({super.key, this.initialDurationMinutes = 25});
 
   final int initialDurationMinutes;
 
   @override
-  State<FocusView> createState() => _FocusViewState();
+  ConsumerState<FocusView> createState() => _FocusViewState();
 }
 
 enum _FocusPhase { idle, active, complete }
 
-class _FocusViewState extends State<FocusView>
-    with SingleTickerProviderStateMixin {
+class _FocusViewState extends ConsumerState<FocusView>
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   static const List<int> _quickDurations = <int>[15, 25, 45, 60];
 
   late final AnimationController _breathingController;
@@ -25,12 +28,15 @@ class _FocusViewState extends State<FocusView>
 
   Timer? _timer;
   _FocusPhase _phase = _FocusPhase.idle;
+  bool _bountyIntact = true;
+  bool _earnedFocusBounty = false;
 
   bool get _isActive => _phase == _FocusPhase.active;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _targetDurationMinutes = widget.initialDurationMinutes.clamp(5, 120);
     _secondsRemaining = _targetDurationMinutes * 60;
     _breathingController = AnimationController(
@@ -43,10 +49,25 @@ class _FocusViewState extends State<FocusView>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
     _breathingController.dispose();
     unawaited(_restoreHardwareState());
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!_isActive || !_bountyIntact) {
+      return;
+    }
+
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      setState(() {
+        _bountyIntact = false;
+      });
+    }
   }
 
   Future<void> _enterDeepWork() async {
@@ -61,6 +82,8 @@ class _FocusViewState extends State<FocusView>
     setState(() {
       _phase = _FocusPhase.active;
       _secondsRemaining = _targetDurationMinutes * 60;
+      _bountyIntact = true;
+      _earnedFocusBounty = false;
     });
 
     _breathingController.repeat(reverse: true);
@@ -89,6 +112,10 @@ class _FocusViewState extends State<FocusView>
     _timer = null;
     _breathingController.stop();
     await _restoreHardwareState();
+    final earnedBounty = _bountyIntact;
+    if (earnedBounty) {
+      ref.read(gachaControllerProvider.notifier).awardPremiumToken();
+    }
     HapticFeedback.heavyImpact();
 
     if (!mounted) {
@@ -98,6 +125,7 @@ class _FocusViewState extends State<FocusView>
     setState(() {
       _phase = _FocusPhase.complete;
       _secondsRemaining = 0;
+      _earnedFocusBounty = earnedBounty;
     });
   }
 
@@ -115,6 +143,8 @@ class _FocusViewState extends State<FocusView>
     setState(() {
       _phase = _FocusPhase.idle;
       _secondsRemaining = _targetDurationMinutes * 60;
+      _bountyIntact = true;
+      _earnedFocusBounty = false;
     });
   }
 
@@ -132,7 +162,68 @@ class _FocusViewState extends State<FocusView>
       _phase = _FocusPhase.idle;
       _targetDurationMinutes = minutes;
       _secondsRemaining = minutes * 60;
+      _bountyIntact = true;
+      _earnedFocusBounty = false;
     });
+  }
+
+  Widget _buildBountyIndicator({required bool compact}) {
+    final isActive = _isActive;
+    final isEligible = _bountyIntact;
+    final color =
+        isEligible ? const Color(0xFFFFD166) : const Color(0xFF6B7280);
+    final background =
+        isEligible
+            ? const Color(0xFFFFD166).withValues(alpha: 0.18)
+            : const Color(0xFF6B7280).withValues(alpha: 0.18);
+    final label =
+        isEligible
+            ? (isActive ? 'Focus bounty live' : 'Premium bounty ready')
+            : 'Bounty lost';
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 260),
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 12 : 14,
+        vertical: compact ? 9 : 10,
+      ),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.34)),
+        boxShadow:
+            isEligible
+                ? [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.28),
+                    blurRadius: 18,
+                    spreadRadius: 1,
+                  ),
+                ]
+                : const [],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isEligible ? Icons.inventory_2_rounded : Icons.inventory_2_outlined,
+            color: color,
+            size: compact ? 18 : 20,
+          ),
+          if (!compact) ...[
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 12,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   String _formatTime(int seconds) {
@@ -174,11 +265,20 @@ class _FocusViewState extends State<FocusView>
             ),
             const SizedBox(height: 8),
             Text(
-              'Choose a duration, then enter a focused full-screen room.',
+              _phase == _FocusPhase.complete
+                  ? (_earnedFocusBounty
+                      ? 'Clean run. Premium token awarded.'
+                      : 'Session finished, but the focus bounty was lost when the app left the foreground.')
+                  : 'Choose a duration, then enter a focused full-screen room.',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: mutedColor,
                 fontWeight: FontWeight.w600,
               ),
+            ),
+            const SizedBox(height: 14),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: _buildBountyIndicator(compact: false),
             ),
             const SizedBox(height: 28),
             Container(
@@ -280,6 +380,11 @@ class _FocusViewState extends State<FocusView>
       body: SafeArea(
         child: Stack(
           children: [
+            Positioned(
+              top: 20,
+              right: 24,
+              child: _buildBountyIndicator(compact: true),
+            ),
             Center(
               child: AnimatedBuilder(
                 animation: _breathingController,

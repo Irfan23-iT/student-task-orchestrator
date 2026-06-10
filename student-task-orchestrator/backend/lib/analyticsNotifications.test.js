@@ -148,9 +148,11 @@ test('normalizePushSubscriptionPayload accepts wrapped PushSubscription JSON', (
   });
 
   assert.deepEqual(result, {
+    provider: 'web',
     endpoint: 'https://push.example/subscription',
     p256dh: 'p-key',
     auth: 'auth-key',
+    devicePlatform: '',
     expirationTime: null
   });
 });

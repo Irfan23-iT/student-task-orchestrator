@@ -63,10 +63,21 @@ class _MainScreenState extends State<MainScreen> {
         key: key,
         duration: const Duration(milliseconds: 220),
         curve: Curves.easeOut,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
         decoration: BoxDecoration(
-          color: colorScheme.primary,
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [colorScheme.primary, const Color(0xFF20E3B2)],
+          ),
           borderRadius: BorderRadius.circular(999),
+          boxShadow: [
+            BoxShadow(
+              color: colorScheme.primary.withValues(alpha: 0.28),
+              blurRadius: 18,
+              offset: const Offset(0, 8),
+            ),
+          ],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -79,7 +90,7 @@ class _MainScreenState extends State<MainScreen> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.labelMedium?.copyWith(
-                  color: colorScheme.onPrimary,
+                  color: Colors.white,
                   fontWeight: FontWeight.w700,
                   fontSize: 12,
                 ),
@@ -143,16 +154,24 @@ class _MainScreenState extends State<MainScreen> {
       width: double.infinity,
       height: 75.0,
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
+        color: theme.colorScheme.surface.withValues(
+          alpha: theme.brightness == Brightness.dark ? 0.92 : 0.86,
+        ),
         borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color:
+              theme.brightness == Brightness.dark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.white.withValues(alpha: 0.70),
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(
-              alpha: theme.brightness == Brightness.dark ? 0.20 : 0.10,
+              alpha: theme.brightness == Brightness.dark ? 0.30 : 0.13,
             ),
-            blurRadius: 32,
-            spreadRadius: 2,
-            offset: const Offset(0, 14),
+            blurRadius: 34,
+            spreadRadius: 1,
+            offset: const Offset(0, 16),
           ),
         ],
       ),

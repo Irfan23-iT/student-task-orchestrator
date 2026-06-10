@@ -243,6 +243,10 @@ const deliverPushWebhook = async (reminderJob, pushSubscriptions = []) => {
   };
 };
 
+const deliverPush = async (reminderJob, pushSubscriptions = []) => {
+  return deliverPushWebhook(reminderJob, pushSubscriptions);
+};
+
 const applyJobUpdates = async (jobsToUpdate = []) => {
   if (!jobsToUpdate.length) return;
 
@@ -308,7 +312,7 @@ export const dispatchDueRemindersOnce = async ({ nowIso = new Date().toISOString
           : [];
 
         try {
-          const pushResult = reminderJob ? await deliverPushWebhook(reminderJob, pushSubscriptions) : { mode: 'unknown' };
+          const pushResult = reminderJob ? await deliverPush(reminderJob, pushSubscriptions) : { mode: 'unknown' };
           deliveriesToPersist.push({
             ...delivery,
             payload: {

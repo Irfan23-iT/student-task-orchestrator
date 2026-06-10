@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 import {
   buildChatSystemPrompt,
   chatWithAi,
+  createTasksFromAcademicText,
+  createVisionFlashcardsResponse,
   createVisionParseResponse,
   createTaskFromAiAction,
   createAiChatResponse,
@@ -113,7 +115,7 @@ test('createTaskFromAiAction writes CREATE_TASK actions to Supabase', async () =
     title: 'Buy groceries',
     due_date: '2026-05-08T09:00:00.000Z',
     priority_level: 'Medium',
-    status: 'Pending',
+    status: 'TODO',
   };
   const db = {
     from(table) {
@@ -152,7 +154,7 @@ test('createTaskFromAiAction writes CREATE_TASK actions to Supabase', async () =
     description: null,
     due_date: '2026-05-08T09:00:00.000Z',
     priority_level: 'Medium',
-    status: 'Pending',
+    status: 'TODO',
   });
   assert.equal(result, createdTask);
 });
@@ -266,7 +268,7 @@ test('createVisionParseResponse writes vision actions to primary_tasks and sub_t
       description: null,
       due_date: '2026-05-12',
       priority_level: 'Medium',
-      status: 'pending',
+      status: 'TODO',
       task_type: 'assignment',
       notes: 'Created from camera scan.',
     },
@@ -409,6 +411,126 @@ test('createVisionParseResponse deduplicates exact task titles on the same due d
   assert.equal(taskInserts[1].payload[0].due_date, '2026-05-19');
 });
 
+test('createTasksFromAcademicText writes document tasks through the existing task pipeline', async () => {
+  const inserts = [];
+  const db = {
+    from(table) {
+      return {
+        insert(payload) {
+          inserts.push({ table, payload });
+          this.table = table;
+          this.payload = payload;
+          return this;
+        },
+        select() {
+          if (this.table === 'tasks') {
+            return Promise.resolve({
+              data: this.payload.map((row, index) => ({
+                id: `task-${inserts.length}-${index}`,
+                ...row,
+              })),
+              error: null,
+            });
+          }
+          if (this.table === 'sub_tasks') {
+            return Promise.resolve({
+              data: this.payload.map((row, index) => ({
+                id: `sub-${inserts.length}-${index}`,
+                ...row,
+              })),
+              error: null,
+            });
+          }
+          return this;
+        },
+        single() {
+          return Promise.resolve({
+            data: {
+              id: `primary-${inserts.filter((entry) => entry.table === 'primary_tasks').length}`,
+              ...this.payload,
+            },
+            error: null,
+          });
+        },
+      };
+    },
+  };
+
+  const payload = await createTasksFromAcademicText({
+    text: 'Assignment 1 is due on 2026-06-20.',
+    sourceName: 'assignment-brief.pdf',
+    db,
+    userId: 'user-1',
+    generateText: async ({ systemInstruction, prompt, responseMimeType }) => {
+      assert.match(systemInstruction, /student document/);
+      assert.match(prompt, /assignment-brief\.pdf/);
+      assert.equal(responseMimeType, 'application/json');
+      return JSON.stringify({
+        tasks: [
+          {
+            title: 'Submit Assignment 1',
+            description: 'From assignment brief',
+            due_date: '2026-06-20',
+            priority_level: 'High',
+            status: 'pending',
+            task_type: 'assignment',
+            notes: null,
+          },
+        ],
+      });
+    },
+  });
+
+  assert.equal(payload.actionsParsed, 1);
+  assert.equal(payload.tasks[0].title, 'Submit Assignment 1');
+  assert.equal(inserts[0].table, 'primary_tasks');
+  assert.equal(inserts[1].table, 'tasks');
+  assert.equal(inserts[2].table, 'sub_tasks');
+});
+
+test('createVisionFlashcardsResponse returns exactly 5 strict flashcards', async () => {
+  const payload = await createVisionFlashcardsResponse({
+    imageBase64: 'ZmFrZQ==',
+    mimeType: 'image/jpeg',
+    generateText: async () =>
+      JSON.stringify({
+        flashcards: [
+          { front: 'Concept 1', back: 'Definition 1' },
+          { front: 'Concept 2', back: 'Definition 2' },
+          { front: 'Concept 3', back: 'Definition 3' },
+          { front: 'Concept 4', back: 'Definition 4' },
+          { front: 'Concept 5', back: 'Definition 5' },
+        ],
+      }),
+  });
+
+  assert.equal(payload.message, 'Generated 5 flashcards from the image.');
+  assert.equal(payload.flashcards.length, 5);
+  assert.deepEqual(payload.flashcards[0], {
+    front: 'Concept 1',
+    back: 'Definition 1',
+  });
+});
+
+test('createVisionFlashcardsResponse rejects non-strict flashcard JSON', async () => {
+  await assert.rejects(
+    () =>
+      createVisionFlashcardsResponse({
+        imageBase64: 'ZmFrZQ==',
+        mimeType: 'image/jpeg',
+        generateText: async () =>
+          JSON.stringify({
+            flashcards: [{ front: 'Only one', back: 'Not enough' }],
+          }),
+      }),
+    (error) => {
+      assert.equal(error.statusCode, 400);
+      assert.match(error.message, /exactly 5 flashcards/);
+      return true;
+    },
+  );
+});
+
 test('chatWithAi queries tasks through the request-scoped Supabase client and falls back without an API key', async () => {
   const eqCalls = [];
   const neqCalls = [];
@@ -442,7 +564,7 @@ test('chatWithAi queries tasks through the request-scoped Supabase client and fa
                   title: 'Submit calculus worksheet',
                   due_date: '2026-05-07T09:00:00.000Z',
                   priority_level: 'High',
-                  status: 'Pending',
+    status: 'TODO',
                 },
               ],
               error: null,
@@ -464,7 +586,7 @@ test('chatWithAi queries tasks through the request-scoped Supabase client and fa
 
   assert.equal(res.statusCode, 200);
   assert.deepEqual(eqCalls, [['user_id', 'user-1']]);
-  assert.deepEqual(neqCalls, [['status', 'Completed']]);
+  assert.deepEqual(neqCalls, [['status', 'DONE']]);
   assert.equal(res.body.fallback, true);
   assert.match(res.body.response, /Submit calculus worksheet/);
 });

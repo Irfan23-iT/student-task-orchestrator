@@ -1,24 +1,24 @@
 import 'package:flutter/material.dart';
 
 class RakanAppTheme {
-  static const Color _lightPrimary = Color(0xFF2B3D8A);
-  static const Color _darkPrimary = Color(0xFF6F8CFF);
-  static const Color _lightBackground = Color(0xFFF5F7FF);
+  static const Color _lightPrimary = Color(0xFF4C1D95);
+  static const Color _darkPrimary = Color(0xFFA78BFA);
+  static const Color _lightBackground = Color(0xFFF4F0FF);
   static const Color _lightSurface = Color(0xFFFFFFFF);
-  static const Color _lightSurfaceVariant = Color(0xFFEFF3FF);
-  static const Color _lightOutline = Color(0xFFDDE3F3);
-  static const Color _lightText = Color(0xFF172033);
-  static const Color _lightMutedText = Color(0xFF667085);
+  static const Color _lightSurfaceVariant = Color(0xFFEDE7FF);
+  static const Color _lightOutline = Color(0xFFD8CCF7);
+  static const Color _lightText = Color(0xFF111827);
+  static const Color _lightMutedText = Color(0xFF64748B);
 
-  static const Color _darkBackground = Color(0xFF12121A);
-  static const Color _darkSurface = Color(0xFF1E1E28);
-  static const Color _darkSurfaceVariant = Color(0xFF292A36);
-  static const Color _darkOutline = Color(0xFF3A3D4E);
+  static const Color _darkBackground = Color(0xFF050711);
+  static const Color _darkSurface = Color(0xFF111827);
+  static const Color _darkSurfaceVariant = Color(0xFF1F2937);
+  static const Color _darkOutline = Color(0xFF374151);
   static const Color _darkText = Color(0xFFFFFFFF);
   static const Color _darkMutedText = Color(0xFFC8CEDA);
 
-  static const Color _coral = Color(0xFFFF8A8A);
-  static const Color _mint = Color(0xFF7DDDC3);
+  static const Color _coral = Color(0xFFFF7A59);
+  static const Color _mint = Color(0xFF20E3B2);
   static const Color _error = Color(0xFFBA1A1A);
 
   static final ThemeData lightTheme = ThemeData(
@@ -29,19 +29,19 @@ class RakanAppTheme {
       brightness: Brightness.light,
       primary: _lightPrimary,
       onPrimary: Colors.white,
-      secondary: _coral,
-      onSecondary: Color(0xFF421313),
+      secondary: Color(0xFFFF7A59),
+      onSecondary: Color(0xFF42170E),
       tertiary: _mint,
       onTertiary: Color(0xFF0C332A),
       error: _error,
       onError: Colors.white,
       errorContainer: Color(0xFFFFE3E3),
       onErrorContainer: Color(0xFF8E1B1B),
-      primaryContainer: Color(0xFFE7EBFF),
+      primaryContainer: Color(0xFFEDE7FF),
       onPrimaryContainer: _lightPrimary,
-      secondaryContainer: Color(0xFFFFE8E8),
+      secondaryContainer: Color(0xFFFFE6DF),
       onSecondaryContainer: Color(0xFF7A2A2A),
-      tertiaryContainer: Color(0xFFE4FBF5),
+      tertiaryContainer: Color(0xFFDFFCF6),
       onTertiaryContainer: Color(0xFF145345),
       surface: _lightSurface,
       onSurface: _lightText,
@@ -57,7 +57,7 @@ class RakanAppTheme {
     appBarTheme: AppBarTheme(
       centerTitle: true,
       elevation: 0,
-      backgroundColor: _lightBackground,
+      backgroundColor: Colors.transparent,
       foregroundColor: _lightText,
       surfaceTintColor: Colors.transparent,
       titleTextStyle: const TextStyle(
@@ -72,7 +72,7 @@ class RakanAppTheme {
       elevation: 0,
       shadowColor: Colors.black.withValues(alpha: 0.08),
       surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
     ),
     bottomNavigationBarTheme: const BottomNavigationBarThemeData(
       backgroundColor: _lightSurface,
@@ -95,13 +95,13 @@ class RakanAppTheme {
       fillColor: _lightSurface,
       labelStyle: const TextStyle(color: _lightMutedText),
       hintStyle: const TextStyle(color: _lightMutedText),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(24)),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(22)),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(22),
         borderSide: const BorderSide(color: _lightOutline),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(22),
         borderSide: const BorderSide(color: _lightPrimary, width: 1.6),
       ),
     ),

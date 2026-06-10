@@ -114,7 +114,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
 
     expect(find.text('Good morning'), findsOneWidget);
-    expect(find.text('Focus Mode'), findsOneWidget);
+    expect(find.text('Start Focus Mode'), findsOneWidget);
     expect(find.text('QUICK OVERVIEW'), findsOneWidget);
     expect(find.text('UPCOMING'), findsNothing);
     expect(
@@ -128,8 +128,8 @@ void main() {
     expect(find.text('Classes Today'), findsNothing);
     expect(find.text('Focus Reward'), findsOneWidget);
     expect(find.text('Sprint Challenge'), findsOneWidget);
-    expect(find.text('Tap to Race'), findsOneWidget);
-    expect(find.text('View All'), findsOneWidget);
+    expect(find.text('Tap to race'), findsOneWidget);
+    expect(find.text('Refresh'), findsOneWidget);
   });
 
   testWidgets('Sprint challenge screen renders HUD and exits with score', (
@@ -191,7 +191,7 @@ void main() {
 
     await tester.pump(const Duration(milliseconds: 500));
 
-    await tester.tap(find.byTooltip('Open Deep Work Room'));
+    await tester.tap(find.text('Start Focus Mode'));
     await tester.pumpAndSettle();
 
     expect(find.text('Deep Work Room'), findsOneWidget);
@@ -263,12 +263,13 @@ void main() {
 
     await tester.pump(const Duration(milliseconds: 500));
 
-    expect(find.text('Tasks'), findsOneWidget);
-    expect(find.text('Add Custom Task'), findsOneWidget);
+    expect(find.text('Today’s Focus'), findsOneWidget);
+    expect(find.text('Task Queue'), findsOneWidget);
+    expect(find.text('Add Task'), findsOneWidget);
     expect(find.text('AI Orchestrator'), findsNothing);
     expect(find.text('Generate'), findsNothing);
-    expect(find.text('Sync to Calendar'), findsOneWidget);
-    expect(find.text('Delete All'), findsOneWidget);
+    expect(find.text('Sync Calendar'), findsOneWidget);
+    expect(find.text('Clear Tasks'), findsOneWidget);
   });
 
   testWidgets('Tasks view opens custom task form', (tester) async {
@@ -281,7 +282,10 @@ void main() {
     );
 
     await tester.pump(const Duration(milliseconds: 500));
-    await tester.tap(find.text('Add Custom Task'));
+    await tester.tap(find.text('Add Task'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Add manually'));
     await tester.pumpAndSettle();
 
     expect(find.widgetWithText(TextField, 'Task Title'), findsOneWidget);
@@ -317,7 +321,10 @@ void main() {
     await tester.pump();
 
     expect(find.text('Calendar'), findsOneWidget);
-    expect(find.text('Tasks by due date'), findsOneWidget);
+    expect(
+      find.text('Tasks with due dates appear here automatically'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('Calendar view renders task marker and selected day list', (

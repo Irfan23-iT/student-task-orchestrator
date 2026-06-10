@@ -33,11 +33,14 @@ export const normalizeReminderActionPayload = (body = {}) => ({
 export const normalizePushSubscriptionPayload = (body = {}) => {
   const source = body?.subscription && typeof body.subscription === 'object' ? body.subscription : body;
   const keys = source?.keys || {};
+  const provider = String(source?.provider || 'web').trim().toLowerCase();
 
   return {
+    provider,
     endpoint: String(source?.endpoint || '').trim(),
     p256dh: String(keys?.p256dh || source?.p256dh || '').trim(),
     auth: String(keys?.auth || source?.auth || '').trim(),
+    devicePlatform: String(source?.devicePlatform || source?.device_platform || '').trim().toLowerCase(),
     expirationTime:
       source?.expirationTime == null || source?.expirationTime === ''
         ? null

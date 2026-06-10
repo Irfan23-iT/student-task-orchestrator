@@ -35,6 +35,63 @@ class GoogleAccountNotLinkedException implements Exception {
   String toString() => message;
 }
 
+class DriveNotConnectedException implements Exception {
+  const DriveNotConnectedException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+class DriveFileDto {
+  const DriveFileDto({
+    required this.id,
+    required this.name,
+    required this.mimeType,
+    this.modifiedTime,
+  });
+
+  final String id;
+  final String name;
+  final String mimeType;
+  final DateTime? modifiedTime;
+
+  factory DriveFileDto.fromJson(Map<String, dynamic> json) {
+    return DriveFileDto(
+      id: (json['id'] ?? '').toString(),
+      name: (json['name'] ?? 'Untitled file').toString(),
+      mimeType: (json['mimeType'] ?? '').toString(),
+      modifiedTime: DateTime.tryParse((json['modifiedTime'] ?? '').toString()),
+    );
+  }
+}
+
+class DriveImportResultDto {
+  const DriveImportResultDto({
+    required this.message,
+    required this.actionsParsed,
+    required this.taskCount,
+  });
+
+  final String message;
+  final int actionsParsed;
+  final int taskCount;
+
+  factory DriveImportResultDto.fromJson(Map<String, dynamic> json) {
+    final tasks = json['tasks'] as List<dynamic>? ?? const [];
+    final rawActionsParsed = json['actionsParsed'] ?? json['actions_parsed'];
+    return DriveImportResultDto(
+      message: (json['message'] ?? 'Imported Google Drive file.').toString(),
+      actionsParsed:
+          rawActionsParsed is int
+              ? rawActionsParsed
+              : int.tryParse('${rawActionsParsed ?? ''}') ?? 0,
+      taskCount: tasks.length,
+    );
+  }
+}
+
 class AiChatResponse {
   const AiChatResponse({
     required this.message,
@@ -45,6 +102,20 @@ class AiChatResponse {
   final String message;
   final bool actionPerformed;
   final String? actionType;
+}
+
+class FlashcardDto {
+  const FlashcardDto({required this.front, required this.back});
+
+  final String front;
+  final String back;
+
+  factory FlashcardDto.fromJson(Map<String, dynamic> json) {
+    return FlashcardDto(
+      front: (json['front'] ?? '').toString(),
+      back: (json['back'] ?? '').toString(),
+    );
+  }
 }
 
 class DashboardSummaryDto {
@@ -481,8 +552,8 @@ class ApiService {
   }
 
   Future<bool> isLoggedIn() async {
-    final token = await _storage.read(key: _jwtTokenKey);
-    return token != null;
+    final token = await _getValidAccessToken();
+    return token != null && token.isNotEmpty;
   }
 
   Future<void> logout() async {
@@ -499,7 +570,8 @@ class ApiService {
     final session = auth.currentSession;
 
     if (session == null) {
-      return _storage.read(key: _jwtTokenKey);
+      await _storage.delete(key: _jwtTokenKey);
+      return null;
     }
 
     final nowInSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
@@ -523,24 +595,30 @@ class ApiService {
 
   Future<String?> _refreshAccessToken() async {
     final auth = Supabase.instance.client.auth;
-    final refreshedSession = await auth.refreshSession();
-    final refreshedToken =
-        refreshedSession.session?.accessToken ??
-        auth.currentSession?.accessToken;
+    try {
+      final refreshedSession = await auth.refreshSession();
+      final refreshedToken =
+          refreshedSession.session?.accessToken ??
+          auth.currentSession?.accessToken;
 
-    if (refreshedToken != null && refreshedToken.isNotEmpty) {
-      await _storage.write(key: _jwtTokenKey, value: refreshedToken);
+      if (refreshedToken != null && refreshedToken.isNotEmpty) {
+        await _storage.write(key: _jwtTokenKey, value: refreshedToken);
+      }
+
+      return refreshedToken;
+    } on AuthException {
+      await _storage.delete(key: _jwtTokenKey);
+      await auth.signOut();
+      return null;
     }
-
-    return refreshedToken;
   }
 
   Future<Map<String, String>> _getHeaders() async {
-    final session = Supabase.instance.client.auth.currentSession;
-    final token = session?.accessToken ?? await _getValidAccessToken();
-
+    final token = await _getValidAccessToken();
     return _jsonHeaders(token: token);
   }
+
+  Future<Map<String, String>> authHeaders() => _getHeaders();
 
   Future<http.Response> checkHealth() async {
     if (_bypassHealthCheckForTests || _isFlutterTestEnvironment) {
@@ -1245,6 +1323,56 @@ class ApiService {
     return decoded;
   }
 
+  Future<List<FlashcardDto>> generateFlashcardsFromImage({
+    required String imageBase64,
+    String mimeType = 'image/jpeg',
+  }) async {
+    final trimmedImage = imageBase64.trim();
+    if (trimmedImage.isEmpty) {
+      throw ArgumentError('imageBase64 is required.');
+    }
+
+    final headers = await _getHeaders();
+    final url = '$baseUrl/ai/vision-flashcards';
+    final body = jsonEncode({
+      'image_base64': trimmedImage,
+      'image_mime_type': mimeType,
+    });
+    final uri = Uri.parse(url);
+
+    Future<http.Response> postFlashcards(Map<String, String> requestHeaders) {
+      return http
+          .post(uri, headers: requestHeaders, body: body)
+          .timeout(const Duration(seconds: 60));
+    }
+
+    var response = await postFlashcards(headers);
+
+    if (response.statusCode == 401) {
+      final refreshedToken = await _refreshAccessToken();
+      if (refreshedToken == null || refreshedToken.isEmpty) {
+        throw Exception(
+          'Flashcard generation failed: token refresh did not return a session.',
+        );
+      }
+
+      response = await postFlashcards(_jsonHeaders(token: refreshedToken));
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        'Flashcard generation failed: ${response.statusCode} ${response.body}',
+      );
+    }
+
+    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    final flashcardsJson = decoded['flashcards'] as List<dynamic>? ?? const [];
+    return flashcardsJson
+        .whereType<Map<String, dynamic>>()
+        .map(FlashcardDto.fromJson)
+        .toList(growable: false);
+  }
+
   Map<String, dynamic> _withOptionalTaxonomyFields(
     Map<String, dynamic> payload, {
     String? status,
@@ -1678,18 +1806,28 @@ class ApiService {
 
     var response = await http
         .post(Uri.parse('$baseUrl/calendar/sync'), headers: headers)
-        .timeout(const Duration(seconds: 8));
+        .timeout(const Duration(seconds: 30));
 
     if (response.statusCode == 401) {
-      throw const GoogleAccountNotLinkedException(
-        'Google Account not linked. Please link on Web App.',
-      );
+      final refreshedToken = await _getValidAccessToken(forceRefresh: true);
+      response = await http
+          .post(
+            Uri.parse('$baseUrl/calendar/sync'),
+            headers: _jsonHeaders(token: refreshedToken),
+          )
+          .timeout(const Duration(seconds: 30));
     }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       debugPrint(
         '[ApiService] POST $baseUrl/calendar/sync -> ${response.statusCode}',
       );
+
+      if (response.statusCode == 401) {
+        throw const GoogleAccountNotLinkedException(
+          'Your session expired. Please sign in again.',
+        );
+      }
 
       if (response.statusCode == 400) {
         final decoded =
@@ -1720,8 +1858,7 @@ class ApiService {
       return;
     }
 
-    final session = Supabase.instance.client.auth.currentSession;
-    final token = session?.accessToken ?? await _getValidAccessToken();
+    final token = await _getValidAccessToken();
     final headers = _jsonHeaders(token: token);
     debugPrint(
       '[ApiService] POST $baseUrl/calendar/rebuild -> request for user $userId',
@@ -1729,7 +1866,7 @@ class ApiService {
 
     var response = await http
         .post(Uri.parse('$baseUrl/calendar/rebuild'), headers: headers)
-        .timeout(const Duration(seconds: 8));
+        .timeout(const Duration(seconds: 30));
 
     if (response.statusCode == 401) {
       final refreshedToken = await _getValidAccessToken(forceRefresh: true);
@@ -1743,7 +1880,7 @@ class ApiService {
                 'Authorization': 'Bearer $refreshedToken',
             },
           )
-          .timeout(const Duration(seconds: 8));
+          .timeout(const Duration(seconds: 30));
     }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -1758,6 +1895,144 @@ class ApiService {
     debugPrint(
       '[ApiService] POST $baseUrl/calendar/rebuild -> ${response.statusCode}',
     );
+  }
+
+  Future<bool> fetchDriveStatus() async {
+    if (_isFlutterTestEnvironment) {
+      return false;
+    }
+
+    final headers = await _getHeaders();
+    var response = await http
+        .get(Uri.parse('$baseUrl/drive/status'), headers: headers)
+        .timeout(const Duration(seconds: 8));
+
+    if (response.statusCode == 401) {
+      final refreshedToken = await _getValidAccessToken(forceRefresh: true);
+      response = await http
+          .get(
+            Uri.parse('$baseUrl/drive/status'),
+            headers: _jsonHeaders(token: refreshedToken),
+          )
+          .timeout(const Duration(seconds: 8));
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        'Drive status fetch failed: ${response.statusCode} ${response.body}',
+      );
+    }
+
+    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    return decoded['connected'] == true;
+  }
+
+  Future<String> getDriveConnectUrl() async {
+    final headers = await _getHeaders();
+    var response = await http
+        .post(Uri.parse('$baseUrl/drive/connect-url'), headers: headers)
+        .timeout(const Duration(seconds: 8));
+
+    if (response.statusCode == 401) {
+      final refreshedToken = await _getValidAccessToken(forceRefresh: true);
+      response = await http
+          .post(
+            Uri.parse('$baseUrl/drive/connect-url'),
+            headers: _jsonHeaders(token: refreshedToken),
+          )
+          .timeout(const Duration(seconds: 8));
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        'Drive connect URL failed: ${response.statusCode} ${response.body}',
+      );
+    }
+
+    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    final url = (decoded['url'] ?? '').toString();
+    if (url.isEmpty) {
+      throw Exception('Drive connect URL response was missing a url field.');
+    }
+
+    return url;
+  }
+
+  Future<List<DriveFileDto>> listDriveFiles({String query = ''}) async {
+    if (_isFlutterTestEnvironment) {
+      return const <DriveFileDto>[];
+    }
+
+    final uri = Uri.parse('$baseUrl/drive/files').replace(
+      queryParameters: query.trim().isEmpty ? null : {'q': query.trim()},
+    );
+    final headers = await _getHeaders();
+    var response = await http
+        .get(uri, headers: headers)
+        .timeout(const Duration(seconds: 15));
+
+    if (response.statusCode == 401) {
+      final refreshedToken = await _getValidAccessToken(forceRefresh: true);
+      response = await http
+          .get(uri, headers: _jsonHeaders(token: refreshedToken))
+          .timeout(const Duration(seconds: 15));
+    }
+
+    if (response.statusCode == 400) {
+      throw const DriveNotConnectedException('Connect Google Drive first.');
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        'Drive files fetch failed: ${response.statusCode} ${response.body}',
+      );
+    }
+
+    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    final files = decoded['files'] as List<dynamic>? ?? const [];
+    return files
+        .whereType<Map>()
+        .map((file) => DriveFileDto.fromJson(Map<String, dynamic>.from(file)))
+        .where((file) => file.id.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  Future<DriveImportResultDto> importDriveFile(String fileId) async {
+    final normalizedFileId = fileId.trim();
+    if (normalizedFileId.isEmpty) {
+      throw ArgumentError('fileId is required.');
+    }
+
+    final body = jsonEncode({'fileId': normalizedFileId});
+    final headers = await _getHeaders();
+    var response = await http
+        .post(Uri.parse('$baseUrl/drive/import'), headers: headers, body: body)
+        .timeout(const Duration(seconds: 60));
+
+    if (response.statusCode == 401) {
+      final refreshedToken = await _getValidAccessToken(forceRefresh: true);
+      response = await http
+          .post(
+            Uri.parse('$baseUrl/drive/import'),
+            headers: _jsonHeaders(token: refreshedToken),
+            body: body,
+          )
+          .timeout(const Duration(seconds: 60));
+    }
+
+    if (response.statusCode == 400) {
+      throw const DriveNotConnectedException('Connect Google Drive first.');
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        'Drive import failed: ${response.statusCode} ${response.body}',
+      );
+    }
+
+    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    notifyTaskMutation();
+    return DriveImportResultDto.fromJson(decoded);
   }
 
   Future<void> saveFixedClass(ClassModel newClass) async {

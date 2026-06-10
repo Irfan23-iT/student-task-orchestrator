@@ -191,10 +191,52 @@ test('createTask inserts a normalized task through the request-scoped client', a
     description: 'Summarize lecture notes',
     due_date: '2026-05-07T09:00:00.000Z',
     priority_level: 'High',
-    status: 'pending',
+    status: 'TODO',
     task_type: 'general'
   });
   assert.equal(res.body.task.priority_level, 'High');
+});
+
+test('createTask maps mobile display status to database status', async () => {
+  let insertedPayload = null;
+  const req = {
+    user: { id: 'user-1' },
+    body: {
+      title: 'Voice task',
+      priorityLevel: 'Medium',
+      status: 'Pending'
+    },
+    supabase: {
+      from(table) {
+        assert.equal(table, 'tasks');
+        return {
+          insert(payload) {
+            insertedPayload = payload;
+            return this;
+          },
+          select() {
+            return this;
+          },
+          single() {
+            return Promise.resolve({
+              data: {
+                id: 'task-voice',
+                ...insertedPayload,
+                created_at: '2026-05-06T16:00:00.000Z'
+              },
+              error: null
+            });
+          }
+        };
+      }
+    }
+  };
+  const res = createRes();
+
+  await createTask(req, res);
+
+  assert.equal(res.statusCode, 201);
+  assert.equal(insertedPayload.status, 'TODO');
 });
 
 test('createTask returns 400 for a missing title', async () => {

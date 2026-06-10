@@ -537,33 +537,93 @@ class _DashboardViewState extends State<DashboardView>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1A1A1A) : Colors.white,
+        gradient: LinearGradient(
+          colors:
+              isDark
+                  ? const [Color(0xFF201436), Color(0xFF111827)]
+                  : const [Color(0xFFFFFFFF), Color(0xFFF4ECFF)],
+        ),
         borderRadius: BorderRadius.circular(999),
         border: Border.all(
-          color:
-              isDark
-                  ? Colors.white.withValues(alpha: 0.08)
-                  : Colors.black.withValues(alpha: 0.04),
+          color: const Color(
+            0xFF8B5CF6,
+          ).withValues(alpha: isDark ? 0.30 : 0.18),
         ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(
+              0xFF8B5CF6,
+            ).withValues(alpha: isDark ? 0.18 : 0.12),
+            blurRadius: 22,
+            offset: const Offset(0, 10),
+          ),
+        ],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           const Icon(
             Icons.local_fire_department_rounded,
-            color: Color(0xFF20E3B2),
+            color: Color(0xFFFF8A3D),
             size: 18,
           ),
           const SizedBox(width: 6),
           Text(
             '$streak',
             style: theme.textTheme.labelLarge?.copyWith(
-              color: isDark ? Colors.white : Colors.black,
-              fontWeight: FontWeight.w800,
+              color: isDark ? Colors.white : const Color(0xFF111827),
+              fontWeight: FontWeight.w900,
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _sectionLabel(
+    BuildContext context,
+    String label, {
+    String? trailing,
+    VoidCallback? onTrailingPressed,
+  }) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final subTextColor = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
+
+    return Row(
+      children: [
+        Container(
+          width: 4,
+          height: 18,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            gradient: const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFF7C3AED), Color(0xFF20E3B2)],
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          label,
+          style: theme.textTheme.labelLarge?.copyWith(
+            color: subTextColor,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 1.3,
+          ),
+        ),
+        const Spacer(),
+        if (trailing != null)
+          TextButton(
+            onPressed: onTrailingPressed,
+            style: TextButton.styleFrom(
+              foregroundColor: isDark ? Colors.white : const Color(0xFF111827),
+              visualDensity: VisualDensity.compact,
+            ),
+            child: Text(trailing),
+          ),
+      ],
     );
   }
 
@@ -574,9 +634,9 @@ class _DashboardViewState extends State<DashboardView>
   }) {
     final isPressed = _pressedOverviewCards.contains(index);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final baseCardColor = isDark ? const Color(0xFF1A1A1A) : Colors.white;
+    final baseCardColor = isDark ? const Color(0xFF111827) : Colors.white;
     final cardColor = Color.alphaBlend(
-      accent.withValues(alpha: isDark ? 0.16 : 0.10),
+      accent.withValues(alpha: isDark ? 0.18 : 0.09),
       baseCardColor,
     );
     final shadow =
@@ -584,9 +644,9 @@ class _DashboardViewState extends State<DashboardView>
             ? <BoxShadow>[]
             : [
               BoxShadow(
-                color: accent.withValues(alpha: 0.10),
-                blurRadius: 24,
-                offset: const Offset(0, 8),
+                color: accent.withValues(alpha: 0.14),
+                blurRadius: 30,
+                offset: const Offset(0, 16),
               ),
             ];
 
@@ -614,10 +674,20 @@ class _DashboardViewState extends State<DashboardView>
         child: Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: cardColor,
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                cardColor,
+                Color.alphaBlend(
+                  accent.withValues(alpha: isDark ? 0.12 : 0.05),
+                  baseCardColor,
+                ),
+              ],
+            ),
             borderRadius: BorderRadius.circular(32),
             border: Border.all(
-              color: accent.withValues(alpha: isDark ? 0.30 : 0.14),
+              color: accent.withValues(alpha: isDark ? 0.32 : 0.16),
             ),
             boxShadow: shadow,
           ),
@@ -634,9 +704,9 @@ class _DashboardViewState extends State<DashboardView>
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : Colors.black;
-    final baseCardColor = isDark ? const Color(0xFF1A1A1A) : Colors.white;
+    final baseCardColor = isDark ? const Color(0xFF111827) : Colors.white;
     final tintedCardColor = Color.alphaBlend(
-      sprintAccent.withValues(alpha: isDark ? 0.18 : 0.12),
+      sprintAccent.withValues(alpha: isDark ? 0.20 : 0.10),
       baseCardColor,
     );
 
@@ -658,11 +728,33 @@ class _DashboardViewState extends State<DashboardView>
           child: Ink(
             width: double.infinity,
             decoration: BoxDecoration(
-              color: tintedCardColor,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  tintedCardColor,
+                  Color.alphaBlend(
+                    const Color(
+                      0xFF7C3AED,
+                    ).withValues(alpha: isDark ? 0.16 : 0.06),
+                    baseCardColor,
+                  ),
+                ],
+              ),
               borderRadius: BorderRadius.circular(24),
               border: Border.all(
                 color: sprintAccent.withValues(alpha: isDark ? 0.34 : 0.18),
               ),
+              boxShadow:
+                  isDark
+                      ? null
+                      : [
+                        BoxShadow(
+                          color: sprintAccent.withValues(alpha: 0.14),
+                          blurRadius: 28,
+                          offset: const Offset(0, 16),
+                        ),
+                      ],
             ),
             child: Padding(
               padding: const EdgeInsets.all(24),
@@ -671,8 +763,8 @@ class _DashboardViewState extends State<DashboardView>
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: sprintAccent.withValues(alpha: 0.20),
-                      shape: BoxShape.circle,
+                      color: sprintAccent.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(18),
                     ),
                     child: Icon(
                       Icons.sports_motorsports_outlined,
@@ -708,7 +800,13 @@ class _DashboardViewState extends State<DashboardView>
                     ),
                   ),
                   const Spacer(),
-                  const Text('Tap to Race'),
+                  Text(
+                    'Tap to race',
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      color: isDark ? Colors.white70 : const Color(0xFF111827),
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                   const SizedBox(width: 8),
                   Icon(Icons.chevron_right, color: sprintAccent),
                 ],
@@ -734,12 +832,18 @@ class _DashboardViewState extends State<DashboardView>
       decoration: BoxDecoration(
         color:
             isDark
-                ? Colors.white.withValues(alpha: 0.03)
-                : const Color(0xFFF5F5F7),
-        borderRadius: BorderRadius.circular(22),
+                ? Colors.white.withValues(alpha: 0.045)
+                : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color:
+              isDark
+                  ? Colors.white.withValues(alpha: 0.07)
+                  : Colors.black.withValues(alpha: 0.035),
+        ),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(15),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -747,12 +851,19 @@ class _DashboardViewState extends State<DashboardView>
               width: 52,
               height: 52,
               decoration: BoxDecoration(
-                color: const Color(0xFF20E3B2).withValues(alpha: 0.16),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    channelColor.withValues(alpha: 0.22),
+                    const Color(0xFF20E3B2).withValues(alpha: 0.12),
+                  ],
+                ),
                 borderRadius: BorderRadius.circular(18),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.notifications_active_rounded,
-                color: Color(0xFF20E3B2),
+                color: channelColor,
                 size: 24,
               ),
             ),
@@ -1083,8 +1194,8 @@ class _DashboardViewState extends State<DashboardView>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final bgColor = isDark ? Colors.black : const Color(0xFFF5F5F7);
-    final cardColor = isDark ? const Color(0xFF1A1A1A) : Colors.white;
+    final bgColor = isDark ? Colors.black : const Color(0xFFF4F0FF);
+    final cardColor = isDark ? const Color(0xFF111827) : Colors.white;
     final textColor = isDark ? Colors.white : Colors.black;
     final subTextColor = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
     final shadow =
@@ -1092,9 +1203,9 @@ class _DashboardViewState extends State<DashboardView>
             ? <BoxShadow>[]
             : [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 24,
-                offset: const Offset(0, 8),
+                color: const Color(0xFF4C1D95).withValues(alpha: 0.08),
+                blurRadius: 30,
+                offset: const Offset(0, 14),
               ),
             ];
     final taskAccent =
@@ -1113,173 +1224,253 @@ class _DashboardViewState extends State<DashboardView>
           onRefresh: _reloadDashboard,
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.all(24.0),
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 116),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(22),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors:
+                          isDark
+                              ? const [
+                                Color(0xFF080B18),
+                                Color(0xFF241044),
+                                Color(0xFF063B3D),
+                              ]
+                              : const [
+                                Color(0xFFFFFFFF),
+                                Color(0xFFEDE7FF),
+                                Color(0xFFDFFCF6),
+                              ],
+                    ),
+                    borderRadius: BorderRadius.circular(34),
+                    border: Border.all(
+                      color:
+                          isDark
+                              ? Colors.white.withValues(alpha: 0.08)
+                              : Colors.white.withValues(alpha: 0.72),
+                    ),
+                    boxShadow: shadow,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'Good morning',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: subTextColor,
-                              fontWeight: FontWeight.w600,
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Good morning',
+                                  style: theme.textTheme.labelLarge?.copyWith(
+                                    color: subTextColor,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                ValueListenableBuilder<String?>(
+                                  valueListenable:
+                                      ApiService.profileNameNotifier,
+                                  builder: (context, profileName, _) {
+                                    final displayName =
+                                        profileName?.trim().isNotEmpty == true
+                                            ? profileName!.trim()
+                                            : fallbackDisplayName;
+
+                                    return Text(
+                                      displayName,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: theme.textTheme.headlineMedium
+                                          ?.copyWith(
+                                            color: textColor,
+                                            fontSize: 32,
+                                            fontWeight: FontWeight.w900,
+                                            letterSpacing: -1.0,
+                                            height: 1.0,
+                                          ),
+                                    );
+                                  },
+                                ),
+                                const SizedBox(height: 10),
+                                Text(
+                                  'Your study command center is ready.',
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: subTextColor,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(height: 6),
-                          ValueListenableBuilder<String?>(
-                            valueListenable: ApiService.profileNameNotifier,
-                            builder: (context, profileName, _) {
-                              final displayName =
-                                  profileName?.trim().isNotEmpty == true
-                                      ? profileName!.trim()
-                                      : fallbackDisplayName;
-
-                              return Text(
-                                displayName,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: theme.textTheme.headlineMedium?.copyWith(
-                                  color: textColor,
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: -0.5,
-                                  height: 1.05,
+                          const SizedBox(width: 12),
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              _buildStreakBadge(context, currentStreak),
+                              const SizedBox(height: 10),
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: cardColor.withValues(
+                                    alpha: isDark ? 0.70 : 0.92,
+                                  ),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color:
+                                        isDark
+                                            ? Colors.white.withValues(
+                                              alpha: 0.08,
+                                            )
+                                            : Colors.black.withValues(
+                                              alpha: 0.04,
+                                            ),
+                                  ),
                                 ),
-                              );
-                            },
+                                child: IconButton(
+                                  onPressed: () => _signOut(context),
+                                  icon: const Icon(Icons.logout_rounded),
+                                  color: textColor,
+                                  tooltip: 'Sign Out',
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _buildStreakBadge(context, currentStreak),
-                        const SizedBox(width: 8),
-                        Container(
+                      const SizedBox(height: 24),
+                      AnimatedScale(
+                        scale: _isFocusCardPressed ? 0.985 : 1.0,
+                        duration: const Duration(milliseconds: 140),
+                        curve: Curves.easeOutCubic,
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(6),
                           decoration: BoxDecoration(
-                            color: cardColor,
-                            shape: BoxShape.circle,
-                            boxShadow: shadow,
+                            gradient: const LinearGradient(
+                              colors: [
+                                Color(0xFF20E3B2),
+                                Color(0xFF00A3FF),
+                                Color(0xFF7C3AED),
+                              ],
+                              begin: Alignment.centerLeft,
+                              end: Alignment.centerRight,
+                            ),
+                            borderRadius: BorderRadius.circular(28),
                           ),
-                          child: IconButton(
-                            onPressed: () => _signOut(context),
-                            icon: const Icon(Icons.logout_rounded),
-                            color: textColor,
-                            tooltip: 'Sign Out',
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  'Focus Mode',
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    color: subTextColor,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.1,
-                  ),
-                ),
-                AnimatedScale(
-                  scale: _isFocusCardPressed ? 0.985 : 1.0,
-                  duration: const Duration(milliseconds: 140),
-                  curve: Curves.easeOutCubic,
-                  child: Container(
-                    width: double.infinity,
-                    height: 72,
-                    margin: const EdgeInsets.symmetric(vertical: 24),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF20E3B2), Color(0xFF00A3FF)],
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                      ),
-                      borderRadius: BorderRadius.circular(100),
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Tooltip(
-                      message: 'Open Deep Work Room',
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(100),
-                          onTap: _openDeepWorkRoom,
-                          onHighlightChanged: (isPressed) {
-                            setState(() {
-                              _isFocusCardPressed = isPressed;
-                            });
-                          },
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Flexible(
+                          child: Material(
+                            color: Colors.black.withValues(alpha: 0.82),
+                            borderRadius: BorderRadius.circular(23),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(23),
+                              onTap: _openDeepWorkRoom,
+                              onHighlightChanged: (isPressed) {
+                                setState(() {
+                                  _isFocusCardPressed = isPressed;
+                                });
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  18,
+                                  16,
+                                  18,
+                                  16,
+                                ),
                                 child: Row(
-                                  mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(
-                                      Icons.lock_rounded,
-                                      color: Colors.black,
-                                      size: 32,
+                                    Container(
+                                      width: 46,
+                                      height: 46,
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withValues(
+                                          alpha: 0.10,
+                                        ),
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                      child: const Icon(
+                                        Icons.lock_rounded,
+                                        color: Colors.white,
+                                      ),
                                     ),
-                                    const SizedBox(width: 12),
-                                    const Flexible(
-                                      child: Text(
-                                        'Start Focus Mode',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          color: Colors.black,
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.w800,
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: const [
+                                          Text(
+                                            'Start Focus Mode',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.w900,
+                                            ),
+                                          ),
+                                          SizedBox(height: 4),
+                                          Text(
+                                            'Deep work room',
+                                            style: TextStyle(
+                                              color: Colors.white70,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Tooltip(
+                                      message: 'Switch Focus Duration',
+                                      child: GestureDetector(
+                                        onTap: _cycleFocusDuration,
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 9,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white.withValues(
+                                              alpha: 0.12,
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              999,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            _formatFocusTime(),
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w900,
+                                              fontFeatures: [
+                                                FontFeature.tabularFigures(),
+                                              ],
+                                            ),
+                                          ),
                                         ),
                                       ),
                                     ),
                                   ],
                                 ),
                               ),
-                              const SizedBox(width: 16),
-                              Tooltip(
-                                message: 'Switch Focus Duration',
-                                child: GestureDetector(
-                                  onTap: _cycleFocusDuration,
-                                  child: Text(
-                                    _formatFocusTime(),
-                                    style: const TextStyle(
-                                      color: Colors.black,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w800,
-                                      fontFeatures: [
-                                        FontFeature.tabularFigures(),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 28),
-                Text(
-                  'QUICK OVERVIEW',
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    color: subTextColor,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.1,
-                  ),
-                ),
+                _sectionLabel(context, 'QUICK OVERVIEW'),
                 const SizedBox(height: 12),
                 _buildOverviewCards(
                   context,
@@ -1289,22 +1480,11 @@ class _DashboardViewState extends State<DashboardView>
                 const SizedBox(height: 24),
                 _buildSprintChallengeCard(context, sprintAccent: sprintAccent),
                 const SizedBox(height: 28),
-                Row(
-                  children: [
-                    Text(
-                      'ACTIVE REMINDERS',
-                      style: theme.textTheme.labelLarge?.copyWith(
-                        color: subTextColor,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 1.1,
-                      ),
-                    ),
-                    const Spacer(),
-                    TextButton(
-                      onPressed: _reloadDashboard,
-                      child: const Text('View All'),
-                    ),
-                  ],
+                _sectionLabel(
+                  context,
+                  'ACTIVE REMINDERS',
+                  trailing: 'Refresh',
+                  onTrailingPressed: _reloadDashboard,
                 ),
                 const SizedBox(height: 8),
                 _buildActiveReminders(context),

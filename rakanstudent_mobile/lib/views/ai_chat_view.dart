@@ -160,18 +160,18 @@ class _AiChatViewState extends State<AiChatView> {
   Widget build(BuildContext context) {
     final bottomPadding = MediaQuery.of(context).padding.bottom;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? Colors.black : const Color(0xFFF5F5F7);
-    final cardColor = isDark ? const Color(0xFF1A1A1A) : Colors.white;
-    final textColor = isDark ? Colors.white : Colors.black;
+    final bgColor = isDark ? Colors.black : const Color(0xFFF4F0FF);
+    final cardColor = isDark ? const Color(0xFF111827) : Colors.white;
+    final textColor = isDark ? Colors.white : const Color(0xFF111827);
     final subTextColor = isDark ? Colors.grey[400] : Colors.grey[600];
     final shadow =
         isDark
             ? <BoxShadow>[]
             : [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 24,
-                offset: const Offset(0, 8),
+                color: const Color(0xFF4C1D95).withValues(alpha: 0.08),
+                blurRadius: 30,
+                offset: const Offset(0, 14),
               ),
             ];
 
@@ -179,26 +179,75 @@ class _AiChatViewState extends State<AiChatView> {
       backgroundColor: bgColor,
       body: SafeArea(
         child: Padding(
-          padding: EdgeInsets.fromLTRB(24, 24, 24, 92 + bottomPadding),
+          padding: EdgeInsets.fromLTRB(20, 20, 20, 92 + bottomPadding),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                'AI Chat',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  color: textColor,
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors:
+                        isDark
+                            ? const [Color(0xFF080B18), Color(0xFF241044)]
+                            : const [Color(0xFFFFFFFF), Color(0xFFEDE7FF)],
+                  ),
+                  borderRadius: BorderRadius.circular(34),
+                  border: Border.all(
+                    color:
+                        isDark
+                            ? Colors.white.withValues(alpha: 0.08)
+                            : Colors.white.withValues(alpha: 0.72),
+                  ),
+                  boxShadow: shadow,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'AI Chat',
+                            style: Theme.of(
+                              context,
+                            ).textTheme.headlineMedium?.copyWith(
+                              fontWeight: FontWeight.w900,
+                              color: textColor,
+                              letterSpacing: -0.8,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Ask for task planning help',
+                            style: Theme.of(
+                              context,
+                            ).textTheme.bodyMedium?.copyWith(
+                              color: subTextColor,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      width: 58,
+                      height: 58,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF20E3B2).withValues(alpha: 0.16),
+                        borderRadius: BorderRadius.circular(22),
+                      ),
+                      child: const Icon(
+                        Icons.auto_awesome_rounded,
+                        color: Color(0xFF0F766E),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                'Ask for task planning help',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: subTextColor,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 18),
               Expanded(
                 child: ListView.builder(
                   controller: _scrollController,
@@ -212,7 +261,13 @@ class _AiChatViewState extends State<AiChatView> {
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   color: cardColor,
-                  borderRadius: BorderRadius.circular(24),
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(
+                    color:
+                        isDark
+                            ? Colors.white.withValues(alpha: 0.08)
+                            : Colors.white.withValues(alpha: 0.70),
+                  ),
                   boxShadow: shadow,
                 ),
                 child: Row(

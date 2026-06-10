@@ -2,16 +2,23 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
 import '../../services/api_service.dart';
 
 class VoiceCaptureWidget extends StatefulWidget {
-  const VoiceCaptureWidget({super.key, this.apiService, this.onTaskCreated});
+  const VoiceCaptureWidget({
+    super.key,
+    this.apiService,
+    this.onTaskCreated,
+    this.onClose,
+  });
 
   final ApiService? apiService;
   final ValueChanged<AiChatResponse>? onTaskCreated;
+  final VoidCallback? onClose;
 
   @override
   State<VoiceCaptureWidget> createState() => _VoiceCaptureWidgetState();
@@ -20,16 +27,22 @@ class VoiceCaptureWidget extends StatefulWidget {
 class _VoiceCaptureWidgetState extends State<VoiceCaptureWidget>
     with SingleTickerProviderStateMixin {
   late final ApiService _apiService = widget.apiService ?? ApiService();
-  final SpeechToText _speechToText = SpeechToText();
+  SpeechToText _speechToText = SpeechToText();
+  final FlutterTts _flutterTts = FlutterTts();
 
   late final AnimationController _pulseController;
+  late final AnimationController _speakingController;
   bool _speechEnabled = false;
+  bool _ttsReady = false;
+  bool _isSpeaking = false;
   bool _isInitializing = false;
   bool _isListening = false;
   bool _isSubmitting = false;
+  bool _isFinalizing = false;
   String _transcription = '';
-  String? _lastSubmittedText;
   String? _errorMessage;
+  String? _successMessage;
+  Timer? _submitDebounce;
 
   @override
   void initState() {
@@ -38,14 +51,80 @@ class _VoiceCaptureWidgetState extends State<VoiceCaptureWidget>
       vsync: this,
       duration: const Duration(milliseconds: 1000),
     );
+    _speakingController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
     unawaited(_initializeSpeech());
+    unawaited(_initializeTts());
   }
 
   @override
   void dispose() {
+    _submitDebounce?.cancel();
+    unawaited(_stopSpeaking());
     _pulseController.dispose();
-    unawaited(_speechToText.stop());
+    _speakingController.dispose();
+    unawaited(_speechToText.cancel());
     super.dispose();
+  }
+
+  Future<void> _initializeTts() async {
+    await _flutterTts.setLanguage('en-US');
+    await _flutterTts.setSpeechRate(0.48);
+    await _flutterTts.setPitch(1.0);
+    await _flutterTts.awaitSpeakCompletion(false);
+
+    _flutterTts.setStartHandler(() {
+      if (!mounted) return;
+      setState(() {
+        _isSpeaking = true;
+      });
+      _speakingController.repeat(reverse: true);
+    });
+
+    void clearSpeakingState() {
+      if (!mounted) return;
+      setState(() {
+        _isSpeaking = false;
+      });
+      _speakingController.stop();
+      _speakingController.reset();
+    }
+
+    _flutterTts.setCompletionHandler(clearSpeakingState);
+    _flutterTts.setCancelHandler(clearSpeakingState);
+    _flutterTts.setErrorHandler((_) => clearSpeakingState());
+
+    if (!mounted) return;
+    setState(() {
+      _ttsReady = true;
+    });
+  }
+
+  Future<void> _speakResponse(String text) async {
+    final spokenText = text.trim();
+    if (spokenText.isEmpty || !_ttsReady) {
+      return;
+    }
+
+    await _flutterTts.stop();
+    await _flutterTts.speak(spokenText);
+  }
+
+  Future<void> _stopSpeaking() async {
+    await _flutterTts.stop();
+    if (!mounted) return;
+    setState(() {
+      _isSpeaking = false;
+    });
+    _speakingController.stop();
+    _speakingController.reset();
+  }
+
+  void _handleClose() {
+    unawaited(_stopSpeaking());
+    widget.onClose?.call();
   }
 
   Future<void> _initializeSpeech() async {
@@ -97,9 +176,26 @@ class _VoiceCaptureWidgetState extends State<VoiceCaptureWidget>
     });
   }
 
+  Future<void> _resetSpeechRecognizer() async {
+    await _speechToText.cancel();
+    _speechToText = SpeechToText();
+    if (mounted) {
+      setState(() {
+        _speechEnabled = false;
+        _isInitializing = false;
+        _isListening = false;
+      });
+    }
+  }
+
   Future<void> _toggleListening() async {
     if (_isListening) {
       await _stopListening();
+      return;
+    }
+
+    if (_transcription.trim().isNotEmpty) {
+      await _captureFinalTranscription();
       return;
     }
 
@@ -107,6 +203,10 @@ class _VoiceCaptureWidgetState extends State<VoiceCaptureWidget>
   }
 
   Future<void> _startListening() async {
+    _submitDebounce?.cancel();
+    await _stopSpeaking();
+    await _resetSpeechRecognizer();
+
     if (!_speechEnabled) {
       await _initializeSpeech();
     }
@@ -119,6 +219,7 @@ class _VoiceCaptureWidgetState extends State<VoiceCaptureWidget>
     setState(() {
       _transcription = '';
       _errorMessage = null;
+      _successMessage = null;
     });
 
     await _speechToText.listen(
@@ -133,49 +234,105 @@ class _VoiceCaptureWidgetState extends State<VoiceCaptureWidget>
 
   Future<void> _stopListening() async {
     await _speechToText.stop();
-    await _captureFinalTranscription();
+    if (mounted) {
+      setState(() {
+        _isListening = false;
+      });
+    }
+    _scheduleCaptureFinalTranscription();
   }
 
   void _handleSpeechResult(SpeechRecognitionResult result) {
-    setState(() {
-      _transcription = result.recognizedWords;
-    });
-
-    if (result.finalResult) {
-      unawaited(_captureFinalTranscription());
+    if (!mounted) {
+      return;
     }
-  }
 
-  Future<void> _captureFinalTranscription() async {
-    final finalText = _transcription.trim();
-    if (finalText.isEmpty || _isSubmitting || finalText == _lastSubmittedText) {
+    final recognizedWords = result.recognizedWords.trim();
+    if (recognizedWords.isEmpty) {
       return;
     }
 
     setState(() {
+      _transcription = recognizedWords;
+    });
+
+    if (result.finalResult) {
+      setState(() {
+        _isListening = false;
+      });
+      unawaited(_speechToText.stop());
+      _scheduleCaptureFinalTranscription();
+    }
+  }
+
+  void _scheduleCaptureFinalTranscription() {
+    _submitDebounce?.cancel();
+    _submitDebounce = Timer(const Duration(milliseconds: 450), () {
+      if (mounted) {
+        unawaited(_captureFinalTranscription());
+      }
+    });
+  }
+
+  Future<void> _captureFinalTranscription() async {
+    _submitDebounce?.cancel();
+    final finalText = _transcription.trim();
+    if (finalText.isEmpty || _isSubmitting || _isFinalizing) {
+      return;
+    }
+
+    setState(() {
+      _isFinalizing = true;
       _isSubmitting = true;
+      _isListening = false;
       _errorMessage = null;
     });
 
     try {
-      final response = await _apiService.sendChatMessage(finalText);
+      await _speechToText.stop();
+      await _stopSpeaking();
+      final response = await _apiService.sendChatMessage(
+        'Create a task from this voice note. Infer the concise task title, due date or reminder time if mentioned, and priority if obvious. Voice note: "$finalText"',
+      );
+      if (!mounted) {
+        return;
+      }
+
+      await _resetSpeechRecognizer();
+      final successMessage =
+          response.actionPerformed
+              ? response.message
+              : 'I understood the note, but could not create a task from it.';
+
+      setState(() {
+        _transcription = '';
+        _isFinalizing = false;
+        _isSubmitting = false;
+        _successMessage = '$successMessage Tap Voice Task for another.';
+      });
+      unawaited(_speakResponse(successMessage));
+      widget.onTaskCreated?.call(response);
+    } on TimeoutException {
       if (!mounted) {
         return;
       }
 
       setState(() {
-        _transcription = '';
-        _lastSubmittedText = finalText;
+        _isFinalizing = false;
         _isSubmitting = false;
+        _successMessage = null;
+        _errorMessage =
+            'Voice task creation is taking too long. Please try again.';
       });
-      widget.onTaskCreated?.call(response);
     } catch (error) {
       if (!mounted) {
         return;
       }
 
       setState(() {
+        _isFinalizing = false;
         _isSubmitting = false;
+        _successMessage = null;
         _errorMessage = 'Unable to create a task from voice. $error';
       });
     }
@@ -187,20 +344,53 @@ class _VoiceCaptureWidgetState extends State<VoiceCaptureWidget>
     final isDark = theme.brightness == Brightness.dark;
     final listeningColor = const Color(0xFFEF4444);
     final idleColor = const Color(0xFF7C3AED);
+    final speakingColor = const Color(0xFF20E3B2);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Align(
+          alignment: Alignment.centerRight,
+          child: IconButton(
+            onPressed: _isSubmitting ? null : _handleClose,
+            icon: const Icon(Icons.close_rounded),
+            tooltip: 'Close voice capture',
+          ),
+        ),
         Center(
           child: AnimatedBuilder(
-            animation: _pulseController,
+            animation: Listenable.merge([
+              _pulseController,
+              _speakingController,
+            ]),
             builder: (context, child) {
-              final pulse = _isListening ? _pulseController.value : 0.0;
+              final listeningPulse =
+                  _isListening ? _pulseController.value : 0.0;
+              final speakingPulse =
+                  _isSpeaking ? _speakingController.value : 0.0;
               return Container(
-                padding: EdgeInsets.all(6 + (pulse * 10)),
+                padding: EdgeInsets.all(
+                  6 + (listeningPulse * 10) + (speakingPulse * 6),
+                ),
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: listeningColor.withValues(alpha: pulse * 0.16),
+                  color:
+                      _isSpeaking
+                          ? speakingColor.withValues(
+                            alpha: 0.12 + (speakingPulse * 0.12),
+                          )
+                          : listeningColor.withValues(
+                            alpha: listeningPulse * 0.16,
+                          ),
+                  border:
+                      _isSpeaking
+                          ? Border.all(
+                            color: speakingColor.withValues(
+                              alpha: 0.35 + (speakingPulse * 0.35),
+                            ),
+                            width: 2,
+                          )
+                          : null,
                 ),
                 child: child,
               );
@@ -208,13 +398,23 @@ class _VoiceCaptureWidgetState extends State<VoiceCaptureWidget>
             child: Tooltip(
               message:
                   _isListening
-                      ? 'Stop voice capture'
+                      ? 'Finish voice capture'
+                      : _isSpeaking
+                      ? 'Stop Rakan speaking'
                       : _isSubmitting
                       ? 'Creating task'
+                      : _transcription.trim().isNotEmpty
+                      ? 'Create task from transcript'
+                      : _successMessage != null
+                      ? 'Record another voice task'
                       : 'Start voice task',
               child: FilledButton.tonalIcon(
                 onPressed:
-                    _isInitializing || _isSubmitting ? null : _toggleListening,
+                    _isInitializing || _isSubmitting
+                        ? null
+                        : _isSpeaking
+                        ? _stopSpeaking
+                        : _toggleListening,
                 icon:
                     _isInitializing || _isSubmitting
                         ? const SizedBox(
@@ -223,23 +423,40 @@ class _VoiceCaptureWidgetState extends State<VoiceCaptureWidget>
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                         : Icon(
-                          _isListening
+                          _isSpeaking
+                              ? Icons.volume_off_rounded
+                              : _isListening
                               ? Icons.mic_rounded
+                              : _transcription.trim().isNotEmpty
+                              ? Icons.check_rounded
                               : Icons.mic_none_rounded,
                         ),
                 label: Text(
                   _isSubmitting
                       ? 'Creating'
+                      : _isSpeaking
+                      ? 'Stop Audio'
                       : _isListening
-                      ? 'Listening'
+                      ? 'Recording'
+                      : _transcription.trim().isNotEmpty
+                      ? 'Create Task'
+                      : _successMessage != null
+                      ? 'Record Again'
                       : 'Voice Task',
                 ),
                 style: FilledButton.styleFrom(
                   backgroundColor:
-                      _isListening
+                      _isSpeaking
+                          ? speakingColor.withValues(alpha: 0.16)
+                          : _isListening
                           ? listeningColor.withValues(alpha: 0.14)
                           : idleColor.withValues(alpha: isDark ? 0.22 : 0.12),
-                  foregroundColor: _isListening ? listeningColor : idleColor,
+                  foregroundColor:
+                      _isSpeaking
+                          ? speakingColor
+                          : _isListening
+                          ? listeningColor
+                          : idleColor,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 20,
                     vertical: 14,
@@ -256,9 +473,11 @@ class _VoiceCaptureWidgetState extends State<VoiceCaptureWidget>
           duration: const Duration(milliseconds: 220),
           child:
               _isListening ||
+                      _isSpeaking ||
                       _isSubmitting ||
                       _transcription.isNotEmpty ||
-                      _errorMessage != null
+                      _errorMessage != null ||
+                      _successMessage != null
                   ? Container(
                     key: const ValueKey<String>('voice-transcript-banner'),
                     margin: const EdgeInsets.only(top: 14),
@@ -271,31 +490,82 @@ class _VoiceCaptureWidgetState extends State<VoiceCaptureWidget>
                       borderRadius: BorderRadius.circular(18),
                       border: Border.all(
                         color:
-                            _isListening
+                            _isSpeaking
+                                ? speakingColor.withValues(alpha: 0.45)
+                                : _isListening
                                 ? listeningColor.withValues(alpha: 0.30)
                                 : Colors.transparent,
                       ),
                     ),
-                    child: Text(
-                      _errorMessage ??
-                          (_isSubmitting
-                              ? 'Creating a task from your voice...'
-                              : _transcription.isEmpty
-                              ? 'Listening for your task...'
-                              : _transcription),
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color:
-                            _errorMessage == null
-                                ? theme.colorScheme.onSurface
-                                : theme.colorScheme.error,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_isSpeaking) ...[
+                          _SpeakingWave(
+                            animation: _speakingController,
+                            color: speakingColor,
+                          ),
+                          const SizedBox(height: 10),
+                        ],
+                        Text(
+                          _errorMessage ??
+                              _successMessage ??
+                              (_isSubmitting
+                                  ? 'Creating a task from your voice...'
+                                  : _isSpeaking
+                                  ? 'Rakan is speaking...'
+                                  : _transcription.isEmpty
+                                  ? 'Listening for your task...'
+                                  : _transcription),
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color:
+                                _errorMessage == null
+                                    ? _successMessage == null
+                                        ? theme.colorScheme.onSurface
+                                        : const Color(0xFF16A34A)
+                                    : theme.colorScheme.error,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
                     ),
                   )
                   : const SizedBox.shrink(),
         ),
       ],
+    );
+  }
+}
+
+class _SpeakingWave extends StatelessWidget {
+  const _SpeakingWave({required this.animation, required this.color});
+
+  final Animation<double> animation;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: animation,
+      builder: (context, _) {
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: List.generate(5, (index) {
+            final phase = (animation.value + (index * 0.18)) % 1.0;
+            final height = 8 + (phase * 18);
+            return Container(
+              width: 5,
+              height: height,
+              margin: const EdgeInsets.symmetric(horizontal: 3),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.45 + (phase * 0.45)),
+                borderRadius: BorderRadius.circular(999),
+              ),
+            );
+          }),
+        );
+      },
     );
   }
 }

@@ -1,8 +1,6 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
 
@@ -35,17 +33,13 @@ class CalendarView extends StatefulWidget {
 }
 
 class _CalendarViewState extends State<CalendarView> {
-  static const int _maxImageBytes = 1024 * 1024;
-
   final ApiService _apiService = ApiService();
-  final ImagePicker _imagePicker = ImagePicker();
 
   DateTime _focusedDay = DateTime.now();
   DateTime _selectedDay = DateTime.now();
   Map<DateTime, List<Object>> _eventsByDay = const {};
   List<ClassSchedule> _classSchedules = const [];
   bool _isLoading = true;
-  bool _isScanning = false;
 
   @override
   void initState() {
@@ -472,155 +466,23 @@ class _CalendarViewState extends State<CalendarView> {
     return const Color(0xFF8B5CF6);
   }
 
-  String _mimeTypeForImage(XFile image) {
-    final explicitMimeType = image.mimeType;
-    if (explicitMimeType != null && explicitMimeType.startsWith('image/')) {
-      return explicitMimeType;
-    }
-
-    final path = image.path.toLowerCase();
-    if (path.endsWith('.png')) return 'image/png';
-    if (path.endsWith('.webp')) return 'image/webp';
-    if (path.endsWith('.heic')) return 'image/heic';
-    if (path.endsWith('.heif')) return 'image/heif';
-    return 'image/jpeg';
-  }
-
-  void _showScanningDialog(BuildContext dialogContext) {
-    showDialog<void>(
-      context: dialogContext,
-      barrierDismissible: false,
-      builder:
-          (context) => const AlertDialog(
-            content: Row(
-              children: [
-                SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(strokeWidth: 3),
-                ),
-                SizedBox(width: 18),
-                Expanded(child: Text('Scanning & Orchestrating...')),
-              ],
-            ),
-          ),
-    );
-  }
-
-  void _dismissScanningDialog(NavigatorState navigator) {
-    navigator.pop();
-  }
-
-  Future<void> _refreshCalendarAfterScan() async {
-    await _fetchVisibleMonth(showLoading: false);
-    if (!mounted) {
-      return;
-    }
-
-    setState(() {});
-  }
-
-  Future<void> _scanScheduleImage() async {
-    if (_isScanning) {
-      return;
-    }
-
-    final messenger = ScaffoldMessenger.of(context);
-    final rootNavigator = Navigator.of(context, rootNavigator: true);
-
-    setState(() {
-      _isScanning = true;
-    });
-
-    var dialogOpen = false;
-    try {
-      final image = await _imagePicker.pickImage(
-        source: ImageSource.camera,
-        maxWidth: 1280,
-        maxHeight: 1280,
-        imageQuality: 55,
-        requestFullMetadata: false,
-      );
-
-      if (image == null) {
-        return;
-      }
-
-      final bytes = await image.readAsBytes();
-      if (bytes.lengthInBytes > _maxImageBytes) {
-        if (!mounted) return;
-        messenger.showSnackBar(
-          const SnackBar(
-            content: Text('Image is still over 1 MB. Please retake it closer.'),
-          ),
-        );
-        return;
-      }
-
-      if (!mounted) return;
-      _showScanningDialog(rootNavigator.context);
-      dialogOpen = true;
-
-      final response = await _apiService.scanImageForTasks(
-        imageBase64: base64Encode(bytes),
-        mimeType: _mimeTypeForImage(image),
-      );
-      final createdItems = response['created'] as List<dynamic>? ?? const [];
-      if (createdItems.isNotEmpty) {
-        ApiService.notifyTaskMutation();
-      }
-
-      if (!mounted) return;
-      if (dialogOpen) {
-        _dismissScanningDialog(rootNavigator);
-        dialogOpen = false;
-      }
-      await _refreshCalendarAfterScan();
-      if (!mounted) return;
-
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            createdItems.isEmpty
-                ? 'No academic tasks found in that image.'
-                : 'Added ${createdItems.length} task group${createdItems.length == 1 ? '' : 's'}.',
-          ),
-        ),
-      );
-    } catch (error) {
-      if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text('Unable to scan image: $error')),
-      );
-    } finally {
-      if (dialogOpen && mounted) {
-        _dismissScanningDialog(rootNavigator);
-      }
-      if (mounted) {
-        setState(() {
-          _isScanning = false;
-        });
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final selectedEvents = _eventsForDay(_selectedDay);
     final selectedLabel = DateFormat('EEE, MMM d').format(_selectedDay);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? Colors.black : const Color(0xFFF5F5F7);
-    final cardColor = isDark ? const Color(0xFF1A1A1A) : Colors.white;
-    final textColor = isDark ? Colors.white : Colors.black;
+    final bgColor = isDark ? Colors.black : const Color(0xFFF4F0FF);
+    final cardColor = isDark ? const Color(0xFF111827) : Colors.white;
+    final textColor = isDark ? Colors.white : const Color(0xFF111827);
     final subTextColor = isDark ? Colors.grey[400] : Colors.grey[600];
     final shadow =
         isDark
             ? <BoxShadow>[]
             : [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 24,
-                offset: const Offset(0, 8),
+                color: const Color(0xFF4C1D95).withValues(alpha: 0.08),
+                blurRadius: 30,
+                offset: const Offset(0, 14),
               ),
             ];
 
@@ -632,21 +494,70 @@ class _CalendarViewState extends State<CalendarView> {
           onRefresh: () => _fetchVisibleMonth(showLoading: false),
           child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 140),
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 140),
             children: [
-              Text(
-                'Calendar',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  color: textColor,
-                  fontWeight: FontWeight.w800,
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors:
+                        isDark
+                            ? const [Color(0xFF080B18), Color(0xFF241044)]
+                            : const [Color(0xFFFFFFFF), Color(0xFFEDE7FF)],
+                  ),
+                  borderRadius: BorderRadius.circular(34),
+                  border: Border.all(
+                    color:
+                        isDark
+                            ? Colors.white.withValues(alpha: 0.08)
+                            : Colors.white.withValues(alpha: 0.72),
+                  ),
+                  boxShadow: shadow,
                 ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Tasks by due date',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: subTextColor,
-                  fontWeight: FontWeight.w500,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Calendar',
+                            style: Theme.of(
+                              context,
+                            ).textTheme.headlineMedium?.copyWith(
+                              color: textColor,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: -0.8,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Tasks with due dates appear here automatically',
+                            style: Theme.of(
+                              context,
+                            ).textTheme.bodyMedium?.copyWith(
+                              color: subTextColor,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      width: 58,
+                      height: 58,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF7C3AED).withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(22),
+                      ),
+                      child: const Icon(
+                        Icons.event_available_rounded,
+                        color: Color(0xFF7C3AED),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 18),
@@ -767,25 +678,6 @@ class _CalendarViewState extends State<CalendarView> {
                 ...selectedEvents.map(_buildCalendarEventTile),
             ],
           ),
-        ),
-      ),
-      floatingActionButton: Padding(
-        padding: const EdgeInsets.only(bottom: 80),
-        child: FloatingActionButton(
-          heroTag: 'calendar-scan-schedule-fab',
-          tooltip: 'Scan schedule image',
-          onPressed: _isScanning ? null : _scanScheduleImage,
-          child:
-              _isScanning
-                  ? const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 3,
-                      color: Colors.white,
-                    ),
-                  )
-                  : const Icon(Icons.camera_alt_rounded),
         ),
       ),
     );

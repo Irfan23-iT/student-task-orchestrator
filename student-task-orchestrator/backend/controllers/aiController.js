@@ -60,8 +60,8 @@ const generateGeminiText = async ({
   responseMimeType,
 }) => {
   const ai = getGeminiClient();
-  const primaryModelName = process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
-  const fallbackModelName = 'gemini-2.5-flash';
+  const primaryModelName = process.env.GEMINI_MODEL || 'gemini-3.1-flash-preview';
+  const fallbackModelName = 'gemini-3.1-flash-preview';
   const generate = (modelName) =>
     ai.models.generateContent({
       model: modelName,
@@ -275,18 +275,27 @@ export const createTaskFromAiAction = async ({ action, db, userId }) => {
     priority_level: normalizeTaskPriority(
       action.data?.priority ?? action.data?.priority_level,
     ),
-    status: 'Pending',
+    status: 'TODO',
   };
 
-  const { data, error } = await db
+  let result = await db
     .from('tasks')
     .insert(insertPayload)
     .select('id, user_id, title, description, due_date, priority_level, status, created_at')
     .single();
 
-  if (error) throw error;
+  if (result.error && isSchemaColumnError(result.error)) {
+    const { description, due_date, ...leanPayload } = insertPayload;
+    result = await db
+      .from('tasks')
+      .insert(leanPayload)
+      .select('id, user_id, title, priority_level, status, created_at')
+      .single();
+  }
 
-  return data;
+  if (result.error) throw result.error;
+
+  return result.data;
 };
 
 const VISION_PARSE_PROMPT = [
@@ -299,6 +308,21 @@ const VISION_PARSE_PROMPT = [
   'Never include user_id, id, created_at, category_id, reminders, subtasks, nested objects, or extra keys. The backend owns user_id and persistence metadata.',
   'Use null for unknown description, due_date, or notes. Use Medium when priority is unclear. Use pending for status.',
 ].join('\n');
+
+const TEXT_IMPORT_PROMPT = [
+  'You are an academic coordinator extracting actionable work from a student document.',
+  'Return ONLY valid JSON. Do not return markdown, prose, comments, or ACTION blocks.',
+  'The JSON MUST be exactly this shape: {"tasks":[{"title":"string","description":"string or null","due_date":"YYYY-MM-DD or null","priority_level":"Low|Medium|High","status":"pending","task_type":"general|exam|assignment|event|reminder","notes":"string or null"}]}',
+  'Extract assignments, exams, deadlines, project milestones, reminders, study actions, and scheduled academic obligations.',
+  'The tasks array may be empty when no academic work is present.',
+  'Every task object MUST contain exactly these keys: title, description, due_date, priority_level, status, task_type, notes.',
+  'DEDUPLICATION: If the same task appears multiple times for the same date, consolidate it into a SINGLE task entry.',
+  'Never include user_id, id, created_at, category_id, reminders, subtasks, nested objects, or extra keys. The backend owns user_id and persistence metadata.',
+  'Use null for unknown description, due_date, or notes. Use Medium when priority is unclear. Use pending for status.',
+].join('\n');
+
+const VISION_FLASHCARDS_PROMPT =
+  'Analyze this image of study notes. Extract the key concepts and generate exactly 5 flashcards. Return ONLY a JSON object with this structure: { "flashcards": [ { "front": "Question or Concept", "back": "Answer or Definition" } ] }.';
 
 const VISION_TASK_KEYS = [
   'title',
@@ -442,9 +466,9 @@ const normalizeVisionTaskType = (value) => {
 
 const normalizeVisionStatus = (value) => {
   const normalized = String(value ?? 'pending').trim().toLowerCase();
-  if (normalized === 'in progress' || normalized === 'in_progress') return 'in_progress';
-  if (['completed', 'archived'].includes(normalized)) return normalized;
-  return 'pending';
+  if (normalized === 'in progress' || normalized === 'in_progress') return 'IN_PROGRESS';
+  if (normalized === 'completed' || normalized === 'done' || normalized === 'archived') return 'DONE';
+  return 'TODO';
 };
 
 const normalizeEstimatedMinutes = (value) => {
@@ -758,7 +782,7 @@ export const executeVisionActions = async ({ actions, db, userId }) => {
 
 const generateVisionActionText = async ({ imageBase64, mimeType }) => {
   const ai = getGeminiClient();
-  const model = process.env.GEMINI_VISION_MODEL || 'gemini-3-flash-preview';
+  const model = process.env.GEMINI_VISION_MODEL || 'gemini-2.5-flash';
   const response = await ai.models.generateContent({
     model,
     contents: [
@@ -866,6 +890,47 @@ export const createVisionParseResponse = async ({
 
   return {
     message: `Created ${created.length} academic task group${created.length === 1 ? '' : 's'} from the image.`,
+    actionsParsed: actions.length,
+    created,
+    tasks: created.flatMap((entry) => entry.tasks || []),
+  };
+};
+
+export const createTasksFromAcademicText = async ({
+  text,
+  sourceName = 'document',
+  db,
+  userId,
+  generateText = generateGeminiText,
+}) => {
+  const trimmedText = String(text || '').trim();
+  if (!trimmedText) {
+    const error = new Error('Document text is required.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const aiText = await generateText({
+    systemInstruction: TEXT_IMPORT_PROMPT,
+    prompt: [`Source document: ${sourceName}`, '', trimmedText.slice(0, 300_000)].join('\n'),
+    responseMimeType: 'application/json',
+  });
+  const tasks = dedupeVisionTasksByTitleAndDueDate(parseStrictVisionTasks(aiText));
+  const actions = visionTasksToActions(tasks);
+
+  if (actions.length === 0) {
+    return {
+      message: 'No academic tasks or deadlines were found in the document.',
+      actionsParsed: 0,
+      created: [],
+      tasks: [],
+    };
+  }
+
+  const created = await executeVisionActions({ actions, db, userId });
+
+  return {
+    message: `Created ${created.length} academic task group${created.length === 1 ? '' : 's'} from ${sourceName}.`,
     actionsParsed: actions.length,
     created,
     tasks: created.flatMap((entry) => entry.tasks || []),
@@ -1022,7 +1087,7 @@ export const chatWithAi = async (req, res) => {
       .from('tasks')
       .select('id, user_id, title, description, due_date, priority_level, status, created_at')
       .eq('user_id', userId)
-      .neq('status', 'Completed')
+      .neq('status', 'DONE')
       .order('due_date', { ascending: true, nullsFirst: false })
       .order('created_at', { ascending: false })
       .limit(20);
@@ -1065,6 +1130,89 @@ export const chatWithAi = async (req, res) => {
   }
 };
 
+const generateVisionFlashcardText = async ({ imageBase64, mimeType }) => {
+  const ai = getGeminiClient();
+  const model = process.env.GEMINI_VISION_MODEL || 'gemini-2.5-flash';
+  const response = await ai.models.generateContent({
+    model,
+    contents: [
+      createPartFromText(VISION_FLASHCARDS_PROMPT),
+      createPartFromBase64(imageBase64, mimeType),
+    ],
+    config: {
+      temperature: 0.2,
+      maxOutputTokens: 2048,
+      responseMimeType: 'application/json',
+    },
+  });
+
+  return response.text || '';
+};
+
+const parseStrictVisionFlashcards = (text) => {
+  const trimmed = String(text || '').trim();
+  if (!trimmed) {
+    throw createBadVisionJsonError('AI returned an empty flashcard JSON payload.');
+  }
+
+  const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  const candidate = fenceMatch?.[1]?.trim() || trimmed;
+
+  let parsed;
+  try {
+    parsed = JSON.parse(candidate);
+  } catch {
+    throw createBadVisionJsonError('AI returned malformed JSON for flashcards.');
+  }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw createBadVisionJsonError('AI flashcard JSON must be an object.');
+  }
+
+  const rootKeys = Object.keys(parsed);
+  if (rootKeys.length !== 1 || rootKeys[0] !== 'flashcards') {
+    throw createBadVisionJsonError('AI flashcard JSON must contain only the flashcards key.');
+  }
+
+  if (!Array.isArray(parsed.flashcards) || parsed.flashcards.length !== 5) {
+    throw createBadVisionJsonError('AI flashcard JSON must contain exactly 5 flashcards.');
+  }
+
+  return parsed.flashcards.map((flashcard, index) => {
+    if (!flashcard || typeof flashcard !== 'object' || Array.isArray(flashcard)) {
+      throw createBadVisionJsonError(`AI flashcard at index ${index} must be an object.`);
+    }
+
+    const keys = Object.keys(flashcard);
+    const hasOnlyAllowedKeys = keys.length === 2 && keys.includes('front') && keys.includes('back');
+    if (!hasOnlyAllowedKeys) {
+      throw createBadVisionJsonError(`AI flashcard at index ${index} must contain only front and back.`);
+    }
+
+    const front = String(flashcard.front || '').trim();
+    const back = String(flashcard.back || '').trim();
+    if (!front || !back) {
+      throw createBadVisionJsonError(`AI flashcard at index ${index} must include front and back text.`);
+    }
+
+    return { front, back };
+  });
+};
+
+export const createVisionFlashcardsResponse = async ({
+  imageBase64,
+  mimeType,
+  generateText = generateVisionFlashcardText,
+}) => {
+  const aiText = await generateText({ imageBase64, mimeType });
+  const flashcards = parseStrictVisionFlashcards(aiText);
+
+  return {
+    message: 'Generated 5 flashcards from the image.',
+    flashcards,
+  };
+};
+
 export const visionParse = async (req, res) => {
   try {
     const db = serviceSupabase;
@@ -1098,6 +1246,32 @@ export const visionParse = async (req, res) => {
     res.status(statusCode).json({
       error: statusCode === 400 ? error.message : 'Failed to parse image.',
       details: error.message || 'Unknown vision parse error.',
+    });
+  }
+};
+
+export const visionFlashcards = async (req, res) => {
+  try {
+    const image = normalizeImagePayload(
+      req.body?.image_base64,
+      req.body?.image_mime_type ?? req.body?.mime_type,
+    );
+
+    const payload = await createVisionFlashcardsResponse({
+      imageBase64: image.base64,
+      mimeType: image.mimeType,
+    });
+
+    res.status(200).json({
+      ...payload,
+      imageBytes: image.byteLength,
+    });
+  } catch (error) {
+    const statusCode = Number.isInteger(error?.statusCode) ? error.statusCode : 500;
+    console.error('Vision flashcards failed:', error);
+    res.status(statusCode).json({
+      error: statusCode === 400 ? error.message : 'Failed to generate flashcards.',
+      details: error.message || 'Unknown vision flashcard error.',
     });
   }
 };

@@ -8,6 +8,7 @@ test('buildSystemReadinessReport marks rollout blocked when core services fail',
     supabaseReachable: true,
     redisReachable: false,
     calendarConfigured: true,
+    driveConfigured: true,
     emailConfigured: true,
     serverPushConfigured: true,
     errorTrackingConfigured: true,
@@ -27,10 +28,12 @@ test('buildSystemReadinessReport marks rollout degraded when optional integratio
     supabaseReachable: true,
     redisReachable: true,
     calendarConfigured: false,
+    driveConfigured: false,
     emailConfigured: false,
     serverPushConfigured: false,
     errorTrackingConfigured: false,
     missingCalendarEnv: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_CALENDAR_REDIRECT_URI'],
+    missingDriveEnv: ['GOOGLE_DRIVE_REDIRECT_URI'],
     missingEmailEnv: ['NOTIFICATION_EMAIL_WEBHOOK_URL', 'RESEND_API_KEY'],
     missingPushEnv: ['NOTIFICATION_PUSH_WEBHOOK_URL', 'VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY'],
     missingErrorTrackingEnv: ['ERROR_TRACKING_WEBHOOK_URL']
@@ -38,12 +41,13 @@ test('buildSystemReadinessReport marks rollout degraded when optional integratio
 
   assert.equal(report.status, 'degraded');
   assert.equal(report.blockers.length, 0);
-  assert.equal(report.warnings.length, 4);
+  assert.equal(report.warnings.length, 5);
   assert.equal(report.readyForFullHardening, false);
   assert.deepEqual(report.missingEnvVars, [
     'GOOGLE_CLIENT_ID',
     'GOOGLE_CLIENT_SECRET',
     'GOOGLE_CALENDAR_REDIRECT_URI',
+    'GOOGLE_DRIVE_REDIRECT_URI',
     'NOTIFICATION_EMAIL_WEBHOOK_URL',
     'RESEND_API_KEY',
     'NOTIFICATION_PUSH_WEBHOOK_URL',
@@ -58,12 +62,14 @@ test('buildSystemReadinessReport marks rollout ready when all checks pass', () =
     supabaseReachable: true,
     redisReachable: true,
     calendarConfigured: true,
+    driveConfigured: true,
     emailConfigured: true,
     serverPushConfigured: true,
     errorTrackingConfigured: true,
     redisUrl: 'redis://cache.internal:6379',
     redisUsingDefaultUrl: false,
     missingCalendarEnv: [],
+    missingDriveEnv: [],
     missingEmailEnv: [],
     missingPushEnv: [],
     missingErrorTrackingEnv: []
