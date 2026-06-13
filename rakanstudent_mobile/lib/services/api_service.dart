@@ -44,6 +44,15 @@ class DriveNotConnectedException implements Exception {
   String toString() => message;
 }
 
+class DriveIntegrationUnavailableException implements Exception {
+  const DriveIntegrationUnavailableException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 class DriveFileDto {
   const DriveFileDto({
     required this.id,
@@ -499,6 +508,39 @@ class ApiService {
     final isTestEnvironment =
         Zone.current[#test.declarer] != null || _bypassNetworkForTests;
     return isTestEnvironment;
+  }
+
+  static Never _throwDriveResponseException(
+    String action,
+    http.Response response,
+  ) {
+    if (response.statusCode == 404) {
+      throw const DriveIntegrationUnavailableException(
+        'Google Drive import is not available on the backend you are connected to. Restart the backend and make sure it includes the /api/drive routes.',
+      );
+    }
+
+    var details = response.body.trim();
+    try {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map<String, dynamic>) {
+        details =
+            (decoded['details'] ?? decoded['error'] ?? decoded['message'] ?? '')
+                .toString()
+                .trim();
+      }
+    } catch (_) {
+      if (details.toLowerCase().contains('<!doctype html>') ||
+          details.toLowerCase().contains('<html')) {
+        details = 'The backend returned an HTML error page.';
+      }
+    }
+
+    throw Exception(
+      details.isEmpty
+          ? '$action failed: ${response.statusCode}'
+          : '$action failed: ${response.statusCode} $details',
+    );
   }
 
   static AnalyticsModel _emptyAnalyticsModel() {
@@ -1918,9 +1960,7 @@ class ApiService {
     }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(
-        'Drive status fetch failed: ${response.statusCode} ${response.body}',
-      );
+      _throwDriveResponseException('Drive status fetch', response);
     }
 
     final decoded = jsonDecode(response.body) as Map<String, dynamic>;
@@ -1944,9 +1984,7 @@ class ApiService {
     }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(
-        'Drive connect URL failed: ${response.statusCode} ${response.body}',
-      );
+      _throwDriveResponseException('Drive connect URL', response);
     }
 
     final decoded = jsonDecode(response.body) as Map<String, dynamic>;
@@ -1983,9 +2021,7 @@ class ApiService {
     }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(
-        'Drive files fetch failed: ${response.statusCode} ${response.body}',
-      );
+      _throwDriveResponseException('Drive files fetch', response);
     }
 
     final decoded = jsonDecode(response.body) as Map<String, dynamic>;
@@ -2025,9 +2061,7 @@ class ApiService {
     }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(
-        'Drive import failed: ${response.statusCode} ${response.body}',
-      );
+      _throwDriveResponseException('Drive import', response);
     }
 
     final decoded = jsonDecode(response.body) as Map<String, dynamic>;

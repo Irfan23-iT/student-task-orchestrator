@@ -49,7 +49,6 @@ class _DashboardViewState extends State<DashboardView>
   bool _wasFocusTimerRunningInBackground = false;
   DateTime? _backgroundedAt;
   Future<DashboardSummaryDto>? _dashboardFuture;
-  final Set<int> _pressedOverviewCards = <int>{};
 
   bool get _isFocusTimerActive => _timer?.isActive ?? false;
 
@@ -580,6 +579,168 @@ class _DashboardViewState extends State<DashboardView>
     );
   }
 
+  String _todayLabel() {
+    const weekdays = <int, String>{
+      DateTime.monday: 'Monday',
+      DateTime.tuesday: 'Tuesday',
+      DateTime.wednesday: 'Wednesday',
+      DateTime.thursday: 'Thursday',
+      DateTime.friday: 'Friday',
+      DateTime.saturday: 'Saturday',
+      DateTime.sunday: 'Sunday',
+    };
+    const months = <int, String>{
+      1: 'Jan',
+      2: 'Feb',
+      3: 'Mar',
+      4: 'Apr',
+      5: 'May',
+      6: 'Jun',
+      7: 'Jul',
+      8: 'Aug',
+      9: 'Sep',
+      10: 'Oct',
+      11: 'Nov',
+      12: 'Dec',
+    };
+
+    final now = DateTime.now();
+    return '${weekdays[now.weekday]}, ${now.day} ${months[now.month]}';
+  }
+
+  Widget _buildDailyPulseCard(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
+    Widget buildPulse({
+      required String reminderCount,
+      required String classCount,
+    }) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color:
+              isDark
+                  ? Colors.white.withValues(alpha: 0.055)
+                  : const Color(0xFFFFFFFF),
+          borderRadius: BorderRadius.circular(30),
+          border: Border.all(
+            color:
+                isDark
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : const Color(0xFFE6DDFC),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.today_rounded, color: colorScheme.primary),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    _todayLabel(),
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                _buildPulseTile(
+                  context,
+                  label: 'Agenda items',
+                  value: reminderCount,
+                  icon: Icons.notifications_active_rounded,
+                  color: colorScheme.primary,
+                ),
+                const SizedBox(width: 10),
+                _buildPulseTile(
+                  context,
+                  label: 'Classes',
+                  value: classCount,
+                  icon: Icons.school_rounded,
+                  color: colorScheme.secondary,
+                ),
+                const SizedBox(width: 10),
+                _buildPulseTile(
+                  context,
+                  label: 'Streak',
+                  value: '$_currentStreak',
+                  icon: Icons.local_fire_department_rounded,
+                  color: const Color(0xFFFF8A3D),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    return FutureBuilder<DashboardSummaryDto>(
+      future: _dashboardFuture,
+      builder: (context, snapshot) {
+        if (snapshot.hasData) {
+          final summary = snapshot.data!;
+          return buildPulse(
+            reminderCount: summary.upcomingBlocks.length.toString(),
+            classCount: summary.scheduleClassesTodayCount.toString(),
+          );
+        }
+
+        return buildPulse(reminderCount: '--', classCount: '--');
+      },
+    );
+  }
+
+  Widget _buildPulseTile(
+    BuildContext context, {
+    required String label,
+    required String value,
+    required IconData icon,
+    required Color color,
+  }) {
+    final theme = Theme.of(context);
+
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.11),
+          borderRadius: BorderRadius.circular(22),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: color, size: 20),
+            const SizedBox(height: 10),
+            Text(
+              value,
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _sectionLabel(
     BuildContext context,
     String label, {
@@ -624,76 +785,6 @@ class _DashboardViewState extends State<DashboardView>
             child: Text(trailing),
           ),
       ],
-    );
-  }
-
-  Widget _buildOverviewCard({
-    required int index,
-    required Color accent,
-    required Widget child,
-  }) {
-    final isPressed = _pressedOverviewCards.contains(index);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final baseCardColor = isDark ? const Color(0xFF111827) : Colors.white;
-    final cardColor = Color.alphaBlend(
-      accent.withValues(alpha: isDark ? 0.18 : 0.09),
-      baseCardColor,
-    );
-    final shadow =
-        isDark
-            ? <BoxShadow>[]
-            : [
-              BoxShadow(
-                color: accent.withValues(alpha: 0.14),
-                blurRadius: 30,
-                offset: const Offset(0, 16),
-              ),
-            ];
-
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTapDown: (_) {
-        setState(() {
-          _pressedOverviewCards.add(index);
-        });
-      },
-      onTapUp: (_) {
-        setState(() {
-          _pressedOverviewCards.remove(index);
-        });
-      },
-      onTapCancel: () {
-        setState(() {
-          _pressedOverviewCards.remove(index);
-        });
-      },
-      child: AnimatedScale(
-        scale: isPressed ? 0.97 : 1.0,
-        duration: const Duration(milliseconds: 140),
-        curve: Curves.easeOutCubic,
-        child: Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                cardColor,
-                Color.alphaBlend(
-                  accent.withValues(alpha: isDark ? 0.12 : 0.05),
-                  baseCardColor,
-                ),
-              ],
-            ),
-            borderRadius: BorderRadius.circular(32),
-            border: Border.all(
-              color: accent.withValues(alpha: isDark ? 0.32 : 0.16),
-            ),
-            boxShadow: shadow,
-          ),
-          child: child,
-        ),
-      ),
     );
   }
 
@@ -931,189 +1022,6 @@ class _DashboardViewState extends State<DashboardView>
     );
   }
 
-  Widget _buildOverviewCards(
-    BuildContext context, {
-    required Color taskAccent,
-    required Color classAccent,
-  }) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final subTextColor = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
-
-    Widget buildBentoGrid({
-      required String pendingTasksValue,
-      required String nextClassName,
-      required String nextClassSubtitle,
-    }) {
-      return LayoutBuilder(
-        builder: (context, constraints) {
-          final cardHeight = constraints.maxWidth >= 520 ? 172.0 : 164.0;
-
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: SizedBox(
-                  height: cardHeight,
-                  child: _buildOverviewCard(
-                    index: 0,
-                    accent: taskAccent,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Icon(Icons.check_rounded, color: taskAccent, size: 30),
-                        Flexible(
-                          child: FittedBox(
-                            alignment: Alignment.bottomLeft,
-                            fit: BoxFit.scaleDown,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                FittedBox(
-                                  alignment: Alignment.centerLeft,
-                                  fit: BoxFit.scaleDown,
-                                  child: Text(
-                                    pendingTasksValue,
-                                    style: theme.textTheme.displaySmall
-                                        ?.copyWith(
-                                          color: taskAccent,
-                                          fontSize: 38,
-                                          fontWeight: FontWeight.bold,
-                                          height: 0.95,
-                                        ),
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'Tasks Pending',
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.titleMedium?.copyWith(
-                                    color: subTextColor,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 18),
-              Expanded(
-                child: SizedBox(
-                  height: cardHeight,
-                  child: ValueListenableBuilder<int>(
-                    valueListenable: ApiService.scheduleMutationNotifier,
-                    builder: (context, scheduleVersion, _) {
-                      return _buildOverviewCard(
-                        index: 1,
-                        accent: classAccent,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Icon(
-                              Icons.schedule_rounded,
-                              color: classAccent,
-                              size: 30,
-                            ),
-                            Flexible(
-                              child: FittedBox(
-                                alignment: Alignment.bottomLeft,
-                                fit: BoxFit.scaleDown,
-                                child: Column(
-                                  key: ValueKey<int>(scheduleVersion),
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    FittedBox(
-                                      alignment: Alignment.centerLeft,
-                                      fit: BoxFit.scaleDown,
-                                      child: Text(
-                                        nextClassName,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: theme.textTheme.titleLarge
-                                            ?.copyWith(
-                                              color: classAccent,
-                                              fontSize: 22,
-                                              fontWeight: FontWeight.w800,
-                                              height: 1.2,
-                                            ),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      nextClassSubtitle,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: theme.textTheme.titleMedium
-                                          ?.copyWith(
-                                            color: subTextColor,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-            ],
-          );
-        },
-      );
-    }
-
-    return FutureBuilder<DashboardSummaryDto>(
-      future: _dashboardFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return buildBentoGrid(
-            pendingTasksValue: '--',
-            nextClassName: 'No classes today',
-            nextClassSubtitle: 'Next Class',
-          );
-        }
-
-        if (snapshot.hasError) {
-          return buildBentoGrid(
-            pendingTasksValue: '0',
-            nextClassName: 'No classes today',
-            nextClassSubtitle: 'Next Class',
-          );
-        }
-
-        if (!snapshot.hasData) {
-          return buildBentoGrid(
-            pendingTasksValue: '0',
-            nextClassName: 'No classes today',
-            nextClassSubtitle: 'Next Class',
-          );
-        }
-
-        final summary = snapshot.data!;
-        final pendingTasksValue = summary.upcomingBlocks.length.toString();
-        return buildBentoGrid(
-          pendingTasksValue: pendingTasksValue,
-          nextClassName: summary.nextClassTitle,
-          nextClassSubtitle: summary.nextClassDetail,
-        );
-      },
-    );
-  }
-
   Widget _buildActiveReminders(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
@@ -1208,10 +1116,6 @@ class _DashboardViewState extends State<DashboardView>
                 offset: const Offset(0, 14),
               ),
             ];
-    final taskAccent =
-        isDark ? const Color(0xFFB388FF) : const Color(0xFF651FFF);
-    final classAccent =
-        isDark ? const Color(0xFFFF8A65) : const Color(0xFFFF5722);
     final sprintAccent =
         isDark ? const Color(0xFFFFCA28) : const Color(0xFFFF8F00);
     final fallbackDisplayName = _resolveDisplayName();
@@ -1302,7 +1206,7 @@ class _DashboardViewState extends State<DashboardView>
                                 ),
                                 const SizedBox(height: 10),
                                 Text(
-                                  'Your study command center is ready.',
+                                  'Your day at a glance is ready.',
                                   style: theme.textTheme.bodyMedium?.copyWith(
                                     color: subTextColor,
                                     fontWeight: FontWeight.w600,
@@ -1407,7 +1311,7 @@ class _DashboardViewState extends State<DashboardView>
                                             CrossAxisAlignment.start,
                                         children: const [
                                           Text(
-                                            'Start Focus Mode',
+                                            'Open Deep Work Room',
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                             style: TextStyle(
@@ -1470,19 +1374,15 @@ class _DashboardViewState extends State<DashboardView>
                   ),
                 ),
                 const SizedBox(height: 28),
-                _sectionLabel(context, 'QUICK OVERVIEW'),
+                _sectionLabel(context, 'DAILY PULSE'),
                 const SizedBox(height: 12),
-                _buildOverviewCards(
-                  context,
-                  taskAccent: taskAccent,
-                  classAccent: classAccent,
-                ),
+                _buildDailyPulseCard(context),
                 const SizedBox(height: 24),
                 _buildSprintChallengeCard(context, sprintAccent: sprintAccent),
                 const SizedBox(height: 28),
                 _sectionLabel(
                   context,
-                  'ACTIVE REMINDERS',
+                  'TODAY\'S AGENDA',
                   trailing: 'Refresh',
                   onTrailingPressed: _reloadDashboard,
                 ),

@@ -25,7 +25,7 @@ class VoiceCaptureWidget extends StatefulWidget {
 }
 
 class _VoiceCaptureWidgetState extends State<VoiceCaptureWidget>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late final ApiService _apiService = widget.apiService ?? ApiService();
   SpeechToText _speechToText = SpeechToText();
   final FlutterTts _flutterTts = FlutterTts();
@@ -70,10 +70,16 @@ class _VoiceCaptureWidgetState extends State<VoiceCaptureWidget>
   }
 
   Future<void> _initializeTts() async {
-    await _flutterTts.setLanguage('en-US');
-    await _flutterTts.setSpeechRate(0.48);
-    await _flutterTts.setPitch(1.0);
-    await _flutterTts.awaitSpeakCompletion(false);
+    try {
+      await _flutterTts.setLanguage('en-US');
+      await _flutterTts.setSpeechRate(0.48);
+      await _flutterTts.setPitch(1.0);
+      await _flutterTts.awaitSpeakCompletion(false);
+    } on MissingPluginException {
+      return;
+    } on PlatformException {
+      return;
+    }
 
     _flutterTts.setStartHandler(() {
       if (!mounted) return;
@@ -108,12 +114,24 @@ class _VoiceCaptureWidgetState extends State<VoiceCaptureWidget>
       return;
     }
 
-    await _flutterTts.stop();
-    await _flutterTts.speak(spokenText);
+    try {
+      await _flutterTts.stop();
+      await _flutterTts.speak(spokenText);
+    } on MissingPluginException {
+      return;
+    } on PlatformException {
+      return;
+    }
   }
 
   Future<void> _stopSpeaking() async {
-    await _flutterTts.stop();
+    try {
+      await _flutterTts.stop();
+    } on MissingPluginException {
+      return;
+    } on PlatformException {
+      return;
+    }
     if (!mounted) return;
     setState(() {
       _isSpeaking = false;
@@ -137,33 +155,57 @@ class _VoiceCaptureWidgetState extends State<VoiceCaptureWidget>
       _errorMessage = null;
     });
 
-    final enabled = await _speechToText.initialize(
-      onError: (error) {
-        if (!mounted) {
-          return;
-        }
-        setState(() {
-          _errorMessage = error.errorMsg;
-          _isListening = false;
-        });
-        _pulseController.stop();
-      },
-      onStatus: (status) {
-        if (!mounted) {
-          return;
-        }
-        final listening = status == 'listening';
-        setState(() {
-          _isListening = listening;
-        });
-        if (listening) {
-          _pulseController.repeat(reverse: true);
-        } else {
+    late final bool enabled;
+    try {
+      enabled = await _speechToText.initialize(
+        onError: (error) {
+          if (!mounted) {
+            return;
+          }
+          setState(() {
+            _errorMessage = error.errorMsg;
+            _isListening = false;
+          });
           _pulseController.stop();
-          _pulseController.reset();
-        }
-      },
-    );
+        },
+        onStatus: (status) {
+          if (!mounted) {
+            return;
+          }
+          final listening = status == 'listening';
+          setState(() {
+            _isListening = listening;
+          });
+          if (listening) {
+            _pulseController.repeat(reverse: true);
+          } else {
+            _pulseController.stop();
+            _pulseController.reset();
+          }
+        },
+      );
+    } on MissingPluginException {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _speechEnabled = false;
+        _isInitializing = false;
+        _errorMessage = 'Speech recognition is unavailable on this device.';
+      });
+      return;
+    } on PlatformException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _speechEnabled = false;
+        _isInitializing = false;
+        _errorMessage =
+            error.message ?? 'Speech recognition could not be initialized.';
+      });
+      return;
+    }
 
     if (!mounted) {
       return;
@@ -177,7 +219,13 @@ class _VoiceCaptureWidgetState extends State<VoiceCaptureWidget>
   }
 
   Future<void> _resetSpeechRecognizer() async {
-    await _speechToText.cancel();
+    try {
+      await _speechToText.cancel();
+    } on MissingPluginException {
+      // Ignore: resetting should never make the voice sheet crash.
+    } on PlatformException {
+      // Ignore: a failed cancel still leaves us with a fresh recognizer below.
+    }
     _speechToText = SpeechToText();
     if (mounted) {
       setState(() {
@@ -222,18 +270,43 @@ class _VoiceCaptureWidgetState extends State<VoiceCaptureWidget>
       _successMessage = null;
     });
 
-    await _speechToText.listen(
-      onResult: _handleSpeechResult,
-      listenOptions: SpeechListenOptions(
-        listenMode: ListenMode.dictation,
-        partialResults: true,
-        cancelOnError: true,
-      ),
-    );
+    try {
+      await _speechToText.listen(
+        onResult: _handleSpeechResult,
+        listenOptions: SpeechListenOptions(
+          listenMode: ListenMode.dictation,
+          partialResults: true,
+          cancelOnError: true,
+        ),
+      );
+    } on MissingPluginException {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _speechEnabled = false;
+        _isListening = false;
+        _errorMessage = 'Speech recognition is unavailable on this device.';
+      });
+    } on PlatformException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isListening = false;
+        _errorMessage = error.message ?? 'Unable to start voice recording.';
+      });
+    }
   }
 
   Future<void> _stopListening() async {
-    await _speechToText.stop();
+    try {
+      await _speechToText.stop();
+    } on MissingPluginException {
+      // Ignore: stopping should be safe even when the platform plugin is absent.
+    } on PlatformException {
+      // Ignore: UI state is reset below.
+    }
     if (mounted) {
       setState(() {
         _isListening = false;
@@ -289,7 +362,13 @@ class _VoiceCaptureWidgetState extends State<VoiceCaptureWidget>
     });
 
     try {
-      await _speechToText.stop();
+      try {
+        await _speechToText.stop();
+      } on MissingPluginException {
+        // Ignore: submission can continue with the captured transcript.
+      } on PlatformException {
+        // Ignore: submission can continue with the captured transcript.
+      }
       await _stopSpeaking();
       final response = await _apiService.sendChatMessage(
         'Create a task from this voice note. Infer the concise task title, due date or reminder time if mentioned, and priority if obvious. Voice note: "$finalText"',

@@ -114,18 +114,16 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
 
     expect(find.text('Good morning'), findsOneWidget);
-    expect(find.text('Start Focus Mode'), findsOneWidget);
-    expect(find.text('QUICK OVERVIEW'), findsOneWidget);
+    expect(find.text('Open Deep Work Room'), findsOneWidget);
+    expect(find.text('DAILY PULSE'), findsOneWidget);
     expect(find.text('UPCOMING'), findsNothing);
     expect(
       find.text('No upcoming classes or task deadlines yet.'),
       findsNothing,
     );
-    expect(find.text('ACTIVE REMINDERS'), findsOneWidget);
-    expect(find.text('Tasks Pending'), findsOneWidget);
-    expect(find.text('No classes today'), findsOneWidget);
-    expect(find.text('Next Class'), findsOneWidget);
-    expect(find.text('Classes Today'), findsNothing);
+    expect(find.text('TODAY\'S AGENDA'), findsOneWidget);
+    expect(find.text('Agenda items'), findsOneWidget);
+    expect(find.text('Classes'), findsOneWidget);
     expect(find.text('Focus Reward'), findsOneWidget);
     expect(find.text('Sprint Challenge'), findsOneWidget);
     expect(find.text('Tap to race'), findsOneWidget);
@@ -191,7 +189,7 @@ void main() {
 
     await tester.pump(const Duration(milliseconds: 500));
 
-    await tester.tap(find.text('Start Focus Mode'));
+    await tester.tap(find.text('Open Deep Work Room'));
     await tester.pumpAndSettle();
 
     expect(find.text('Deep Work Room'), findsOneWidget);
@@ -217,7 +215,7 @@ void main() {
       MaterialApp(
         home: MainScreen(
           testScreens: List<Widget>.generate(
-            6,
+            7,
             (index) => ColoredBox(
               color: Colors.white,
               child: Center(child: Text('Screen $index')),
@@ -296,6 +294,30 @@ void main() {
     expect(find.text('Priority'), findsOneWidget);
     expect(find.text('Optional Due Date'), findsOneWidget);
     expect(find.text('Save Task'), findsOneWidget);
+  });
+
+  testWidgets('Tasks view opens voice task sheet without plugin crash', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const ProviderScope(
+        child: MaterialApp(home: TasksView(fetchOnInit: false)),
+      ),
+    );
+
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.text('Add Task'));
+    await tester.pumpAndSettle();
+
+    final voiceOption = find.text('Voice to task');
+    await tester.ensureVisible(voiceOption);
+    await tester.tap(voiceOption);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+
+    expect(find.text('Voice to Task'), findsOneWidget);
+    expect(find.text('Voice Task'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('AI chat view renders chat input', (tester) async {

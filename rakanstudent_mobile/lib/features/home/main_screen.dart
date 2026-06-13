@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../coach/coach_view.dart';
 import '../profile/profile_view.dart';
 import '../schedule/schedule_view.dart';
 import '../tasks/tasks_view.dart';
@@ -23,6 +24,7 @@ class _MainScreenState extends State<MainScreen> {
 
   static const _titles = <String>[
     'Home',
+    'Coach',
     'Schedule',
     'Tasks',
     'Calendar',
@@ -32,7 +34,7 @@ class _MainScreenState extends State<MainScreen> {
 
   void _setCurrentIndex(int index) {
     if (_currentIndex == index) {
-      if (index == 2) {
+      if (index == 3) {
         setState(() {
           _taskTabRefreshSignal++;
         });
@@ -42,7 +44,7 @@ class _MainScreenState extends State<MainScreen> {
 
     setState(() {
       _currentIndex = index;
-      if (index == 2) {
+      if (index == 3) {
         _taskTabRefreshSignal++;
       }
     });
@@ -186,28 +188,33 @@ class _MainScreenState extends State<MainScreen> {
           ),
           _buildNavButton(
             index: 1,
-            icon: Icons.calendar_month_rounded,
+            icon: Icons.psychology_rounded,
             label: _titles[1],
           ),
           _buildNavButton(
             index: 2,
-            icon: Icons.list_rounded,
+            icon: Icons.calendar_month_rounded,
             label: _titles[2],
           ),
           _buildNavButton(
             index: 3,
-            icon: Icons.event_available_rounded,
+            icon: Icons.list_rounded,
             label: _titles[3],
           ),
           _buildNavButton(
             index: 4,
-            icon: Icons.auto_awesome_rounded,
+            icon: Icons.event_available_rounded,
             label: _titles[4],
           ),
           _buildNavButton(
             index: 5,
-            icon: Icons.person_rounded,
+            icon: Icons.auto_awesome_rounded,
             label: _titles[5],
+          ),
+          _buildNavButton(
+            index: 6,
+            icon: Icons.person_rounded,
+            label: _titles[6],
           ),
         ],
       ),
@@ -220,6 +227,7 @@ class _MainScreenState extends State<MainScreen> {
         widget.testScreens ??
         <Widget>[
           const DashboardView(),
+          const CoachView(),
           const ScheduleView(),
           TasksView(refreshSignal: _taskTabRefreshSignal),
           const CalendarView(),

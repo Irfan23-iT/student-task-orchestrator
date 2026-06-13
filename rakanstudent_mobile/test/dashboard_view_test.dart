@@ -20,7 +20,7 @@ class _DashboardScheduleState {
 }
 
 void main() {
-  testWidgets('Dashboard Next Class container updates when schedule mutates', (
+  testWidgets('Dashboard Daily Pulse updates when schedule mutates', (
     tester,
   ) async {
     final scheduleState = _DashboardScheduleState();
@@ -37,7 +37,8 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
 
-    expect(find.text('No classes today'), findsOneWidget);
+    expect(find.text('DAILY PULSE'), findsOneWidget);
+    expect(find.text('Classes'), findsOneWidget);
 
     final now = DateTime.now();
     scheduleState.fixedClasses = [
@@ -56,10 +57,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pump();
 
-    expect(find.text('Software Quality'), findsOneWidget);
+    expect(find.text('1'), findsOneWidget);
   });
 
-  testWidgets('Dashboard Tasks Pending container uses active reminders count', (
+  testWidgets('Dashboard Daily Pulse uses active reminders count', (
     tester,
   ) async {
     final dashboardState =
@@ -99,8 +100,9 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 500));
 
-    expect(find.text('Tasks Pending'), findsOneWidget);
-    expect(find.text('3'), findsOneWidget);
+    expect(find.text('DAILY PULSE'), findsOneWidget);
+    expect(find.text('Agenda items'), findsOneWidget);
+    expect(find.text('3'), findsWidgets);
     expect(find.text('Software Quality homework'), findsOneWidget);
     expect(find.text('Read chapter four'), findsOneWidget);
     expect(find.text('Prepare lab notes'), findsOneWidget);

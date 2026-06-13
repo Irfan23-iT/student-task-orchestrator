@@ -670,6 +670,9 @@ class _TasksViewState extends ConsumerState<TasksView> {
     } on DriveNotConnectedException catch (error) {
       if (!mounted) return;
       messenger.showSnackBar(SnackBar(content: Text(error.message)));
+    } on DriveIntegrationUnavailableException catch (error) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text(error.message)));
     } on SocketException {
       if (!mounted) return;
       _showNetworkErrorSnackBar();
@@ -1647,6 +1650,29 @@ class _FlashcardsDialogState extends State<_FlashcardsDialog> {
   final PageController _pageController = PageController(viewportFraction: 0.9);
   int _currentIndex = 0;
 
+  bool get _canGoBack => _currentIndex > 0;
+  bool get _canGoForward => _currentIndex < widget.flashcards.length - 1;
+
+  void _goToCard(int index) {
+    _pageController.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  void _goToPreviousCard() {
+    if (_canGoBack) {
+      _goToCard(_currentIndex - 1);
+    }
+  }
+
+  void _goToNextCard() {
+    if (_canGoForward) {
+      _goToCard(_currentIndex + 1);
+    }
+  }
+
   @override
   void dispose() {
     _pageController.dispose();
@@ -1682,7 +1708,7 @@ class _FlashcardsDialogState extends State<_FlashcardsDialog> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Swipe through the cards from your notes.',
+                'Swipe through the cards from your notes or use the arrows.',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                   fontWeight: FontWeight.w600,
@@ -1770,23 +1796,41 @@ class _FlashcardsDialogState extends State<_FlashcardsDialog> {
               ),
               const SizedBox(height: 18),
               Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(widget.flashcards.length, (index) {
-                  final selected = index == _currentIndex;
-                  return AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    width: selected ? 22 : 8,
-                    height: 8,
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    decoration: BoxDecoration(
-                      color:
-                          selected
-                              ? theme.colorScheme.primary
-                              : theme.colorScheme.outlineVariant,
-                      borderRadius: BorderRadius.circular(999),
+                children: [
+                  IconButton.filledTonal(
+                    onPressed: _canGoBack ? _goToPreviousCard : null,
+                    icon: const Icon(Icons.chevron_left_rounded),
+                    tooltip: 'Previous card',
+                  ),
+                  Expanded(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(widget.flashcards.length, (
+                        index,
+                      ) {
+                        final selected = index == _currentIndex;
+                        return AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          width: selected ? 22 : 8,
+                          height: 8,
+                          margin: const EdgeInsets.symmetric(horizontal: 4),
+                          decoration: BoxDecoration(
+                            color:
+                                selected
+                                    ? theme.colorScheme.primary
+                                    : theme.colorScheme.outlineVariant,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                        );
+                      }),
                     ),
-                  );
-                }),
+                  ),
+                  IconButton.filledTonal(
+                    onPressed: _canGoForward ? _goToNextCard : null,
+                    icon: const Icon(Icons.chevron_right_rounded),
+                    tooltip: 'Next card',
+                  ),
+                ],
               ),
             ],
           ),
