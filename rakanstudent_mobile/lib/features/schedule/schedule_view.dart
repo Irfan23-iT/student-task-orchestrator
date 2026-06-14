@@ -866,7 +866,7 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
         ),
         const SizedBox(height: 12),
         DropdownButtonFormField<int>(
-          value: _dayValue,
+          initialValue: _dayValue,
           dropdownColor: _cardBackground,
           style: const TextStyle(color: Colors.white),
           decoration: _darkFieldDecoration(labelText: 'Time/Day Selection'),

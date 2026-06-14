@@ -22,9 +22,17 @@ import aiRoutes from './routes/ai.js';
 import focusRoutes from './routes/focus.js';
 import { completeCalendarOAuthCallback } from './controllers/calendarController.js';
 import { completeDriveOAuthCallback } from './controllers/driveController.js';
-import { startCalendarSyncLoop } from './lib/calendarService.js';
+import { startCalendarSyncLoop, validateCalendarConfig } from './lib/calendarService.js';
 import { startNotificationDispatchLoop } from './lib/notificationService.js';
 import { getSystemReadinessSnapshot } from './lib/systemReadiness.js';
+
+// Validate required environment configuration on startup
+try {
+  validateCalendarConfig();
+} catch (err) {
+  console.error('[FATAL]', err.message);
+  process.exit(1);
+}
 
 const require = createRequire(import.meta.url);
 const { PDFParse } = require('pdf-parse');

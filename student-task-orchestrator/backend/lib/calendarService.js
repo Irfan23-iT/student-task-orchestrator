@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 
-import { supabase } from '../config/supabase.js';
+import { supabase, serviceSupabase } from '../config/supabase.js';
 import { log } from './logger.js';
 
 const GOOGLE_OAUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -37,6 +37,18 @@ export const getCalendarIntegrationCapabilities = () => ({
 const ensureCalendarConfig = () => {
   if (!hasCalendarConfig()) {
     throw new Error('Google Calendar OAuth is not configured.');
+  }
+};
+
+export const validateCalendarConfig = () => {
+  const missing = [];
+  if (!process.env.GOOGLE_CLIENT_ID) missing.push('GOOGLE_CLIENT_ID');
+  if (!process.env.GOOGLE_CLIENT_SECRET) missing.push('GOOGLE_CLIENT_SECRET');
+  if (!process.env.GOOGLE_CALENDAR_REDIRECT_URI) missing.push('GOOGLE_CALENDAR_REDIRECT_URI');
+  if (!process.env.GOOGLE_OAUTH_STATE_SECRET) missing.push('GOOGLE_OAUTH_STATE_SECRET');
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) missing.push('SUPABASE_SERVICE_ROLE_KEY');
+  if (missing.length > 0) {
+    throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
   }
 };
 
@@ -171,15 +183,38 @@ const refreshGoogleAccessToken = async (connection) => {
     throw new Error('Missing Google refresh token.');
   }
 
-  const tokenPayload = await googleTokenRequest(
-    {
-      refresh_token: connection.refresh_token,
-      client_id: getGoogleClientId(),
-      client_secret: getGoogleClientSecret(),
-      grant_type: 'refresh_token'
-    },
-    'Google token refresh failed.'
-  );
+  let tokenPayload;
+  try {
+    tokenPayload = await googleTokenRequest(
+      {
+        refresh_token: connection.refresh_token,
+        client_id: getGoogleClientId(),
+        client_secret: getGoogleClientSecret(),
+        grant_type: 'refresh_token'
+      },
+      'Google token refresh failed.'
+    );
+  } catch (err) {
+    const status = err.status;
+    const payload = err.payload || {};
+    const errorDesc = payload.error_description || payload.error || '';
+    if (status === 400 && errorDesc.includes('invalid_grant')) {
+      // Clear tokens and mark connection as revoked so UI shows "Connect" and background sync stops
+      await supabase
+        .from('calendar_connections')
+        .update({
+          access_token: '',
+          refresh_token: '',
+          token_expires_at: null,
+          sync_status: 'revoked',
+          last_error: 'Google access revoked: ' + errorDesc,
+          next_sync_at: null
+        })
+        .eq('id', connection.id);
+      throw Object.assign(new Error('Google access revoked'), { revoked: true, status, payload });
+    }
+    throw err;
+  }
 
   const tokenExpiresAt = tokenPayload.expires_in
     ? new Date(Date.now() + Number(tokenPayload.expires_in) * 1000).toISOString()
@@ -304,28 +339,47 @@ const buildManagedEventDescription = (task) =>
     .filter(Boolean)
     .join('\n');
 
-export const buildManagedEventPayload = (task, timeZone) => ({
-  summary: `Study: ${task.title}`,
-  description: buildManagedEventDescription(task),
-  start: {
-    dateTime: `${task.scheduled_date}T${task.scheduled_start_time}`,
-    timeZone
-  },
-  end: {
-    dateTime: `${task.scheduled_date}T${task.scheduled_end_time}`,
-    timeZone
-  },
-  source: {
-    title: 'Student Task Orchestrator',
-    url: getFrontendBaseUrl()
-  },
-  extendedProperties: {
-    private: {
-      managedBy: MANAGED_EVENT_SOURCE,
-      subTaskId: String(task.id)
-    }
+export const buildManagedEventPayload = (task, timeZone) => {
+  const { scheduled_date, scheduled_start_time, scheduled_end_time, id } = task;
+  if (!scheduled_date || !scheduled_start_time || !scheduled_end_time) {
+    throw new Error(`Missing date/time for task ${id ?? 'unknown'}: ${scheduled_date} ${scheduled_start_time} ${scheduled_end_time}`);
   }
-});
+  if (typeof scheduled_date !== 'string' || typeof scheduled_start_time !== 'string' || typeof scheduled_end_time !== 'string') {
+    throw new Error(`Invalid date/time types for task ${id ?? 'unknown'}`);
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(scheduled_date)) {
+    throw new Error(`Invalid scheduled_date format for task ${id ?? 'unknown'}: ${scheduled_date}`);
+  }
+  const timeRegex = /^\d{2}:\d{2}(:\d{2})?$/;
+  if (!timeRegex.test(scheduled_start_time)) {
+    throw new Error(`Invalid scheduled_start_time format for task ${id ?? 'unknown'}: ${scheduled_start_time}`);
+  }
+  if (!timeRegex.test(scheduled_end_time)) {
+    throw new Error(`Invalid scheduled_end_time format for task ${id ?? 'unknown'}: ${scheduled_end_time}`);
+  }
+  return {
+    summary: `Study: ${task.title}`,
+    description: buildManagedEventDescription(task),
+    start: {
+      dateTime: `${task.scheduled_date}T${task.scheduled_start_time}`,
+      timeZone
+    },
+    end: {
+      dateTime: `${task.scheduled_date}T${task.scheduled_end_time}`,
+      timeZone
+    },
+    source: {
+      title: 'Student Task Orchestrator',
+      url: getFrontendBaseUrl()
+    },
+    extendedProperties: {
+      private: {
+        managedBy: MANAGED_EVENT_SOURCE,
+        subTaskId: String(task.id)
+      }
+    }
+  };
+};
 
 const buildManagedPayloadHash = (task, calendarId, timeZone) =>
   crypto
@@ -389,7 +443,7 @@ const upsertCalendarSnapshot = async ({ connectionId, userId, calendars, busyInt
 };
 
 const markConnectionStatus = async (connectionId, updates) => {
-  const { error } = await supabase.from('calendar_connections').update(updates).eq('id', connectionId);
+  const { error } = await serviceSupabase.from('calendar_connections').update(updates).eq('id', connectionId);
   if (error) throw error;
 };
 
@@ -409,14 +463,14 @@ const pruneCalendarArtifacts = async () => {
   const { end } = queryWindow();
   const endIso = end.toISOString();
 
-  const { error: pruneBusyError } = await supabase
+  const { error: pruneBusyError } = await serviceSupabase
     .from('calendar_busy_intervals')
     .delete()
     .lt('ends_at', new Date().toISOString());
 
   if (pruneBusyError) throw pruneBusyError;
 
-  const { error: pruneFutureBusyError } = await supabase
+  const { error: pruneFutureBusyError } = await serviceSupabase
     .from('calendar_busy_intervals')
     .delete()
     .gt('starts_at', endIso);
@@ -527,6 +581,8 @@ const fetchScheduledTasks = async (userId) => {
     .not('scheduled_date', 'is', null)
     .not('scheduled_start_time', 'is', null)
     .not('scheduled_end_time', 'is', null)
+    .neq('scheduled_start_time', '')
+    .neq('scheduled_end_time', '')
     .gte('scheduled_date', startDate)
     .lte('scheduled_date', endDate)
     .order('scheduled_date', { ascending: true })
@@ -684,65 +740,79 @@ const rebuildManagedEventsInternal = async ({ connection, calendars, timeZone, r
 
   const nextRows = [];
   const activeSubTaskIds = new Set();
+  const failures = [];
 
   for (const task of scheduledTasks) {
-    const payload = buildManagedEventPayload(task, targetCalendar.time_zone || timeZone);
-    const payloadHash = buildManagedPayloadHash(
-      task,
-      targetCalendar.external_calendar_id,
-      targetCalendar.time_zone || timeZone
-    );
-    const existingRow = existingBySubTaskId.get(task.id);
+    try {
+      const payload = buildManagedEventPayload(task, targetCalendar.time_zone || timeZone);
+      const payloadHash = buildManagedPayloadHash(
+        task,
+        targetCalendar.external_calendar_id,
+        targetCalendar.time_zone || timeZone
+      );
+      const existingRow = existingBySubTaskId.get(task.id);
 
-    let externalEventId = existingRow?.external_event_id || null;
-    let eventStart = existingRow?.starts_at || null;
-    let eventEnd = existingRow?.ends_at || null;
-    if (!existingRow || existingRow.payload_hash !== payloadHash || existingRow.external_calendar_id !== targetCalendar.external_calendar_id) {
-      const eventPayload =
-        existingRow?.external_event_id && existingRow.external_calendar_id === targetCalendar.external_calendar_id
-          ? await googleCalendarRequest(
-              `/calendars/${encodeURIComponent(existingRow.external_calendar_id)}/events/${encodeURIComponent(existingRow.external_event_id)}`,
-              {
-                accessToken: hydratedConnection.access_token,
-                method: 'PUT',
-                body: payload
-              }
-            )
-          : await (async () => {
-              if (existingRow?.external_event_id) {
-                await deleteGoogleEventIfPresent(
-                  hydratedConnection.access_token,
-                  existingRow.external_calendar_id,
-                  existingRow.external_event_id
-                );
-              }
-              return googleCalendarRequest(`/calendars/${encodeURIComponent(targetCalendar.external_calendar_id)}/events`, {
-                accessToken: hydratedConnection.access_token,
-                method: 'POST',
-                body: payload
-              });
-            })();
+      let externalEventId = existingRow?.external_event_id || null;
+      let eventStart = existingRow?.starts_at || null;
+      let eventEnd = existingRow?.ends_at || null;
+      if (!existingRow || existingRow.payload_hash !== payloadHash || existingRow.external_calendar_id !== targetCalendar.external_calendar_id) {
+        const eventPayload =
+          existingRow?.external_event_id && existingRow.external_calendar_id === targetCalendar.external_calendar_id
+            ? await googleCalendarRequest(
+                `/calendars/${encodeURIComponent(existingRow.external_calendar_id)}/events/${encodeURIComponent(existingRow.external_event_id)}`,
+                {
+                  accessToken: hydratedConnection.access_token,
+                  method: 'PUT',
+                  body: payload
+                }
+              )
+            : await (async () => {
+                if (existingRow?.external_event_id) {
+                  await deleteGoogleEventIfPresent(
+                    hydratedConnection.access_token,
+                    existingRow.external_calendar_id,
+                    existingRow.external_event_id
+                  );
+                }
+                return googleCalendarRequest(`/calendars/${encodeURIComponent(targetCalendar.external_calendar_id)}/events`, {
+                  accessToken: hydratedConnection.access_token,
+                  method: 'POST',
+                  body: payload
+                });
+              })();
 
-      externalEventId = eventPayload?.id || externalEventId;
-      eventStart = eventPayload?.start?.dateTime || eventPayload?.start?.date || eventStart;
-      eventEnd = eventPayload?.end?.dateTime || eventPayload?.end?.date || eventEnd;
+        externalEventId = eventPayload?.id || externalEventId;
+        eventStart = eventPayload?.start?.dateTime || eventPayload?.start?.date || eventStart;
+        eventEnd = eventPayload?.end?.dateTime || eventPayload?.end?.date || eventEnd;
+      }
+
+      nextRows.push({
+        user_id: hydratedConnection.user_id,
+        connection_id: hydratedConnection.id,
+        sub_task_id: task.id,
+        external_calendar_id: targetCalendar.external_calendar_id,
+        external_event_id: externalEventId,
+        starts_at: eventStart || payload.start.dateTime,
+        ends_at: eventEnd || payload.end.dateTime,
+        status: 'synced',
+        last_synced_at: new Date().toISOString(),
+        last_error: null,
+        payload: payload,
+        payload_hash: payloadHash
+      });
+      activeSubTaskIds.add(task.id);
+    } catch (err) {
+      const taskId = task?.id ?? 'unknown';
+      const taskTitle = task?.title ?? 'unknown';
+      const errorMsg = err?.message ?? String(err);
+      failures.push({ taskId, taskTitle, error: errorMsg });
+      log('warn', 'Failed to sync individual task', {
+        requestId: getRequestId(requestId),
+        userId: hydratedConnection.user_id,
+        taskId,
+        error: errorMsg
+      });
     }
-
-    nextRows.push({
-      user_id: hydratedConnection.user_id,
-      connection_id: hydratedConnection.id,
-      sub_task_id: task.id,
-      external_calendar_id: targetCalendar.external_calendar_id,
-      external_event_id: externalEventId,
-      starts_at: eventStart || payload.start.dateTime,
-      ends_at: eventEnd || payload.end.dateTime,
-      status: 'synced',
-      last_synced_at: new Date().toISOString(),
-      last_error: null,
-      payload: payload,
-      payload_hash: payloadHash
-    });
-    activeSubTaskIds.add(task.id);
   }
 
   const staleRows = existingRows.filter((row) => !activeSubTaskIds.has(row.sub_task_id));
@@ -768,7 +838,8 @@ const rebuildManagedEventsInternal = async ({ connection, calendars, timeZone, r
     targetCalendarId: targetCalendar.external_calendar_id,
     syncedCount: nextRows.length,
     standardTaskCount: standardTasks.syncedCount,
-    removedCount: staleRows.length
+    removedCount: staleRows.length,
+    failures
   };
 };
 
@@ -795,6 +866,18 @@ export const syncCalendarForUser = async ({ userId, rebuildManaged = false, requ
       managed
     };
   } catch (error) {
+    // Handle Google access revocation: clear tokens, stop retries, UI shows "Connect"
+    if (error.revoked || (error.status === 400 && error?.payload?.error === 'invalid_grant')) {
+      await markConnectionStatus(connection.id, {
+        sync_status: 'revoked',
+        next_sync_at: null,
+        last_error: error.message
+      });
+      return {
+        ...(await getCalendarStatus({ userId })),
+        managed: null
+      };
+    }
     await markConnectionStatus(connection.id, {
       sync_status: 'error',
       next_sync_at: new Date(Date.now() + SYNC_INTERVAL_MS).toISOString(),
@@ -961,7 +1044,7 @@ export const completeCalendarOAuth = async ({ code, state, requestId } = {}) => 
 };
 
 const syncDueConnections = async () => {
-  const { data, error } = await supabase
+  const { data, error } = await serviceSupabase
     .from('calendar_connections')
     .select('user_id, next_sync_at')
     .eq('provider', 'google')

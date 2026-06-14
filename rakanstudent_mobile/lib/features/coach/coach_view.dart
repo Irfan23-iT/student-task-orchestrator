@@ -3,25 +3,13 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 
 import '../../models/task_model.dart';
 import '../../services/api_service.dart';
 import '../focus/focus_view.dart';
-import 'moodle_assignment_import.dart';
 import 'moodle_calendar_import.dart';
 
 enum _CoachMode { deadline, deepWork, quickWin }
-
-class _MoodleAssignmentCredentials {
-  const _MoodleAssignmentCredentials({
-    required this.baseUrl,
-    required this.token,
-  });
-
-  final String baseUrl;
-  final String token;
-}
 
 class _CoachBreakdown {
   const _CoachBreakdown({
@@ -77,8 +65,7 @@ class _CoachViewState extends State<CoachView> {
   String? _selectedTaskId;
   int _currentCoachStep = 0;
   bool _isImportingMoodle = false;
-  bool _isImportingMoodleFile = false;
-  bool _isImportingMoodleAssignments = false;
+  // Only ICS file import is supported
 
   @override
   void initState() {
@@ -1073,48 +1060,8 @@ class _CoachViewState extends State<CoachView> {
       return;
     }
 
-    final url = await _askForMoodleCalendarUrl();
-    if (url == null || url.trim().isEmpty) {
-      return;
-    }
-
-    final uri = Uri.tryParse(url.trim());
-    if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
-      _showSnackBar('Paste a valid Moodle calendar export URL.');
-      return;
-    }
-
     setState(() {
       _isImportingMoodle = true;
-    });
-
-    try {
-      final response = await http.get(uri).timeout(const Duration(seconds: 20));
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception('Moodle calendar returned ${response.statusCode}.');
-      }
-
-      await _importMoodleIcsContent(response.body);
-    } on SocketException {
-      _showSnackBar('Cannot reach Moodle right now. Please try again.');
-    } catch (error) {
-      _showSnackBar('Unable to import Moodle calendar: $error');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isImportingMoodle = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _importMoodleCalendarFile() async {
-    if (_isImportingMoodleFile) {
-      return;
-    }
-
-    setState(() {
-      _isImportingMoodleFile = true;
     });
 
     try {
@@ -1144,11 +1091,11 @@ class _CoachViewState extends State<CoachView> {
 
       await _importMoodleIcsContent(contents);
     } catch (error) {
-      _showSnackBar('Unable to import Moodle ICS file: $error');
+      _showSnackBar('Unable to import Moodle calendar: $error');
     } finally {
       if (mounted) {
         setState(() {
-          _isImportingMoodleFile = false;
+          _isImportingMoodle = false;
         });
       }
     }
@@ -1181,183 +1128,6 @@ class _CoachViewState extends State<CoachView> {
     _showSnackBar(
       'Imported $imported Moodle event${imported == 1 ? '' : 's'} as tasks.',
     );
-  }
-
-  Future<void> _importMoodleAssignments() async {
-    if (_isImportingMoodleAssignments) {
-      return;
-    }
-
-    final credentials = await _askForMoodleAssignmentCredentials();
-    if (credentials == null) {
-      return;
-    }
-
-    setState(() {
-      _isImportingMoodleAssignments = true;
-    });
-
-    try {
-      final endpoint = Uri.parse(credentials.baseUrl).replace(
-        path: _joinMoodlePath(
-          credentials.baseUrl,
-          '/webservice/rest/server.php',
-        ),
-        queryParameters: {
-          'wstoken': credentials.token,
-          'wsfunction': 'mod_assign_get_assignments',
-          'moodlewsrestformat': 'json',
-        },
-      );
-      final response = await http
-          .get(endpoint)
-          .timeout(const Duration(seconds: 20));
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception('Moodle assignments returned ${response.statusCode}.');
-      }
-
-      final decoded = jsonDecode(response.body);
-      if (decoded is! Map<String, dynamic>) {
-        throw Exception('Moodle returned an unexpected assignment response.');
-      }
-      if (decoded['exception'] != null) {
-        throw Exception(decoded['message'] ?? decoded['exception']);
-      }
-
-      final result = parseMoodleAssignmentsResponse(decoded);
-      if (result.assignments.isEmpty) {
-        _showSnackBar('No upcoming Moodle assignments found.');
-        return;
-      }
-
-      var imported = 0;
-      for (final assignment in result.assignments.take(30)) {
-        await _apiService.createTask(
-          {
-            'title': assignment.title,
-            'description': assignment.notes,
-            'priorityLevel': 'High',
-            'dueDate': assignment.dueAt.toIso8601String(),
-            'status': 'Pending',
-          },
-          taskType: 'moodle',
-          notes: assignment.notes,
-        );
-        imported++;
-      }
-
-      await _loadTasks();
-      _showSnackBar(
-        'Imported $imported Moodle assignment${imported == 1 ? '' : 's'} as tasks.',
-      );
-    } on SocketException {
-      _showSnackBar('Cannot reach Moodle right now. Please try again.');
-    } catch (error) {
-      _showSnackBar('Unable to import Moodle assignments: $error');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isImportingMoodleAssignments = false;
-        });
-      }
-    }
-  }
-
-  Future<String?> _askForMoodleCalendarUrl() {
-    final controller = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Import Moodle Calendar'),
-            content: TextField(
-              controller: controller,
-              autofocus: true,
-              keyboardType: TextInputType.url,
-              decoration: const InputDecoration(
-                labelText: 'Moodle calendar export URL',
-                hintText: 'https://moodle.example.edu/calendar/export.php?...',
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(controller.text),
-                child: const Text('Import'),
-              ),
-            ],
-          ),
-    ).whenComplete(controller.dispose);
-  }
-
-  Future<_MoodleAssignmentCredentials?> _askForMoodleAssignmentCredentials() {
-    final baseUrlController = TextEditingController();
-    final tokenController = TextEditingController();
-    return showDialog<_MoodleAssignmentCredentials>(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Import Moodle Assignments'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: baseUrlController,
-                  keyboardType: TextInputType.url,
-                  decoration: const InputDecoration(
-                    labelText: 'Moodle base URL',
-                    hintText: 'https://moodle.example.edu',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: tokenController,
-                  obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Moodle web service token',
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: () {
-                  final baseUrl = baseUrlController.text.trim();
-                  final token = tokenController.text.trim();
-                  if (baseUrl.isEmpty || token.isEmpty) {
-                    return;
-                  }
-                  Navigator.of(context).pop(
-                    _MoodleAssignmentCredentials(
-                      baseUrl: baseUrl,
-                      token: token,
-                    ),
-                  );
-                },
-                child: const Text('Import'),
-              ),
-            ],
-          ),
-    ).whenComplete(() {
-      baseUrlController.dispose();
-      tokenController.dispose();
-    });
-  }
-
-  String _joinMoodlePath(String baseUrl, String path) {
-    final baseUri = Uri.parse(baseUrl);
-    final basePath =
-        baseUri.path.endsWith('/')
-            ? baseUri.path.substring(0, baseUri.path.length - 1)
-            : baseUri.path;
-    return '$basePath$path';
   }
 
   void _showSnackBar(String message) {
@@ -1678,7 +1448,7 @@ class _CoachViewState extends State<CoachView> {
                 ),
                 const SizedBox(height: 5),
                 Text(
-                  'Import deadlines from a calendar link, or use a Moodle token for richer assignment details.',
+                  'Upload an ICS file exported from your Moodle calendar to import deadlines.',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: colorScheme.onSecondaryContainer.withValues(
                       alpha: 0.78,
@@ -1704,49 +1474,9 @@ class _CoachViewState extends State<CoachView> {
                                   strokeWidth: 2,
                                 ),
                               )
-                              : const Icon(Icons.event_rounded),
-                      label: Text(
-                        _isImportingMoodle ? 'Importing...' : 'Calendar',
-                      ),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed:
-                          _isImportingMoodleFile
-                              ? null
-                              : _importMoodleCalendarFile,
-                      icon:
-                          _isImportingMoodleFile
-                              ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
                               : const Icon(Icons.upload_file_rounded),
                       label: Text(
-                        _isImportingMoodleFile ? 'Importing...' : 'ICS file',
-                      ),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed:
-                          _isImportingMoodleAssignments
-                              ? null
-                              : _importMoodleAssignments,
-                      icon:
-                          _isImportingMoodleAssignments
-                              ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                              : const Icon(Icons.assignment_rounded),
-                      label: Text(
-                        _isImportingMoodleAssignments
-                            ? 'Importing...'
-                            : 'Assignments',
+                        _isImportingMoodle ? 'Importing...' : 'Upload ICS',
                       ),
                     ),
                   ],

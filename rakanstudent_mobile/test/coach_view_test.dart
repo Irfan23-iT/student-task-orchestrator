@@ -55,9 +55,7 @@ void main() {
     expect(find.text('Deep work'), findsOneWidget);
     expect(find.text('Quick win'), findsOneWidget);
     expect(find.text('Moodle Calendar'), findsOneWidget);
-    expect(find.text('Calendar'), findsOneWidget);
-    expect(find.text('ICS file'), findsOneWidget);
-    expect(find.text('Assignments'), findsOneWidget);
+    expect(find.text('Upload ICS'), findsOneWidget);
     expect(find.text('Choose What To Coach'), findsOneWidget);
     expect(find.text('Submit database assignment'), findsWidgets);
     expect(find.text('Step-by-Step Coach'), findsOneWidget);
@@ -111,7 +109,7 @@ void main() {
                 'estimated_minutes': 120,
                 'task_type': 'moodle',
                 'notes':
-                    'Imported from Moodle assignments.\nCourse: Database Systems\nSubmit schema, ERD diagram, SQL queries, and final report.',
+                    'Imported from Moodle calendar.\nCourse: Database Systems\nSubmit schema, ERD diagram, SQL queries, and final report.',
               },
             ];
           },
@@ -156,7 +154,7 @@ void main() {
                 'priority_band': 'Medium',
                 'task_type': 'moodle',
                 'notes':
-                    'Imported from Moodle assignments.\nCourse: Database Systems\nSubmission status: submitted\nGrade: 82 / 100\nFeedback: Explain your schema assumptions.',
+                    'Imported from Moodle calendar.\nCourse: Database Systems\nSubmission status: submitted\nGrade: 82 / 100\nFeedback: Explain your schema assumptions.',
               },
             ];
           },
