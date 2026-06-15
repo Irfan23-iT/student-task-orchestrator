@@ -4,10 +4,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -38,7 +36,7 @@ class TasksView extends ConsumerStatefulWidget {
   ConsumerState<TasksView> createState() => _TasksViewState();
 }
 
-enum _TaskCreationMode { manual, camera, flashcards, voice, pdf, reviewFlashcards }
+enum _TaskCreationMode { manual, camera, flashcards, voice, reviewFlashcards }
 
 class _TasksViewState extends ConsumerState<TasksView> {
   static const int _maxImageBytes = 1024 * 1024;
@@ -932,142 +930,6 @@ class _TasksViewState extends ConsumerState<TasksView> {
     }
   }
 
-  Future<void> _scanPdfForTasks() async {
-    if (_isScanningTaskImage) {
-      return;
-    }
-
-    final messenger = ScaffoldMessenger.of(context);
-    final rootNavigator = Navigator.of(context, rootNavigator: true);
-
-    setState(() {
-      _isScanningTaskImage = true;
-    });
-
-    var dialogOpen = false;
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['pdf'],
-        withData: true,
-      );
-
-      if (result == null || result.files.isEmpty) {
-        setState(() {
-          _isScanningTaskImage = false;
-        });
-        return;
-      }
-
-      final file = result.files.single;
-      if (!mounted) return;
-
-      showDialog<void>(
-        context: rootNavigator.context,
-        barrierDismissible: false,
-        builder:
-            (context) => const AlertDialog(
-              content: Row(
-                children: [
-                  SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 3),
-                  ),
-                  SizedBox(width: 18),
-                  Expanded(child: Text('Scanning PDF for tasks...')),
-                ],
-              ),
-            ),
-      );
-      dialogOpen = true;
-
-      final request = http.MultipartRequest(
-        'POST',
-        Uri.parse('${ApiService.baseUrl}/ai/pdf-tasks'),
-      );
-      request.headers.addAll(await _apiService.authHeaders());
-
-      if (file.bytes != null) {
-        request.files.add(
-          http.MultipartFile.fromBytes(
-            'file',
-            file.bytes!,
-            filename: file.name,
-          ),
-        );
-      } else if (file.path != null) {
-        request.files.add(
-          await http.MultipartFile.fromPath(
-            'file',
-            file.path!,
-            filename: file.name,
-          ),
-        );
-      } else {
-        throw Exception('Could not read the PDF file.');
-      }
-
-      final streamedResponse = await request.send().timeout(
-        const Duration(seconds: 60),
-      );
-      final responseBody = await streamedResponse.stream.bytesToString();
-
-      if (!mounted) return;
-      if (dialogOpen) {
-        rootNavigator.pop();
-        dialogOpen = false;
-      }
-
-      if (streamedResponse.statusCode >= 200 &&
-          streamedResponse.statusCode < 300) {
-        final decoded = jsonDecode(responseBody) as Map<String, dynamic>;
-        final tasks = decoded['tasks'] as List<dynamic>? ?? [];
-        final message = decoded['message']?.toString() ?? '';
-
-        if (tasks.isNotEmpty) {
-          ApiService.notifyTaskMutation();
-          await _fetchTasks();
-          if (!mounted) return;
-          messenger.showSnackBar(
-            SnackBar(
-              content: Text(
-                message.isNotEmpty ? message : 'Created ${tasks.length} task${tasks.length == 1 ? '' : 's'} from PDF.',
-              ),
-            ),
-          );
-        } else {
-          messenger.showSnackBar(
-            SnackBar(
-              content: Text(message.isNotEmpty ? message : 'No tasks found in the PDF. Try a different file.'),
-            ),
-          );
-        }
-      } else {
-        String errorMessage = 'PDF scan failed (${streamedResponse.statusCode})';
-        try {
-          final errorData = jsonDecode(responseBody) as Map<String, dynamic>;
-          errorMessage = errorData['details'] ?? errorData['error'] ?? errorMessage;
-        } catch (_) {}
-        throw Exception(errorMessage);
-      }
-    } catch (error) {
-      if (!mounted) return;
-      if (dialogOpen) {
-        rootNavigator.pop();
-      }
-      messenger.showSnackBar(
-        SnackBar(content: Text('PDF error: ${error.toString().replaceAll('Exception: ', '')}')),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isScanningTaskImage = false;
-        });
-      }
-    }
-  }
-
   Future<void> _generateFlashcardsFromCamera() async {
     if (_isScanningTaskImage) {
       return;
@@ -1302,14 +1164,6 @@ class _TasksViewState extends ConsumerState<TasksView> {
                             : null,
                   ),
                   _TaskCreationOptionTile(
-                    icon: Icons.picture_as_pdf_rounded,
-                    title: 'Scan PDF',
-                    subtitle: 'Import tasks from a PDF syllabus or assignment.',
-                    onTap: () {
-                      Navigator.of(context).pop(_TaskCreationMode.pdf);
-                    },
-                  ),
-                  _TaskCreationOptionTile(
                     icon: Icons.style_rounded,
                     title: 'Review Flashcards',
                     subtitle: 'Study from your saved flashcard decks.',
@@ -1336,8 +1190,6 @@ class _TasksViewState extends ConsumerState<TasksView> {
         unawaited(_generateFlashcardsFromCamera());
       case _TaskCreationMode.voice:
         unawaited(_openVoiceTaskSheet());
-      case _TaskCreationMode.pdf:
-        unawaited(_scanPdfForTasks());
       case _TaskCreationMode.reviewFlashcards:
         unawaited(_showSavedFlashcardsDialog());
     }

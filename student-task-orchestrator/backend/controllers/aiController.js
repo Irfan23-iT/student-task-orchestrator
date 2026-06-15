@@ -64,8 +64,8 @@ const generateGeminiText = async ({
   responseMimeType,
 }) => {
   const ai = getGeminiClient();
-  const primaryModelName = process.env.GEMINI_MODEL || 'gemini-3.1-flash-preview';
-  const fallbackModelName = 'gemini-3.1-flash-preview';
+  const primaryModelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  const fallbackModelName = 'gemini-2.5-flash';
   const generate = (modelName) =>
     ai.models.generateContent({
       model: modelName,
@@ -785,7 +785,7 @@ export const executeVisionActions = async ({ actions, db, userId }) => {
 
 const generateVisionActionText = async ({ imageBase64, mimeType }) => {
   const ai = getGeminiClient();
-  const model = process.env.GEMINI_VISION_MODEL || 'gemini-3.1-flash-preview';
+  const model = process.env.GEMINI_VISION_MODEL || 'gemini-2.5-flash';
   const response = await ai.models.generateContent({
     model,
     contents: [
@@ -1342,7 +1342,7 @@ export const pdfToTasks = async (req, res) => {
 
 const generateVisionFlashcardText = async ({ imageBase64, mimeType }) => {
   const ai = getGeminiClient();
-  const model = process.env.GEMINI_VISION_MODEL || 'gemini-3.1-flash-preview';
+  const model = process.env.GEMINI_VISION_MODEL || 'gemini-2.5-flash';
   const response = await ai.models.generateContent({
     model,
     contents: [

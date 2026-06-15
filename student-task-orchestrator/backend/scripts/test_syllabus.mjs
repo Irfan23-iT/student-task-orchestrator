@@ -78,9 +78,9 @@ Ensure all priorities are lowercase 'high', 'medium', or 'low'.
 Ensure ESTIMATED_MINUTES is a realistic number for a student (e.g., 60, 120, 240).
 Return ONLY the JSON. No markdown backticks.`;
 
-    console.log(`[Test] Requesting extraction from gemini-3.1-flash-lite-preview...`);
+    console.log(`[Test] Requesting extraction from gemini-2.5-flash...`);
     const result = await ai.models.generateContent({
-      model: 'gemini-3.1-flash-lite-preview',
+      model: 'gemini-2.5-flash',
       contents: [
         {
           parts: [
