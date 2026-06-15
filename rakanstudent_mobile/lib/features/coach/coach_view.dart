@@ -1150,10 +1150,7 @@ class _CoachViewState extends State<CoachView> {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor:
-          Theme.of(context).brightness == Brightness.dark
-              ? const Color(0xFF070A14)
-              : const Color(0xFFF7F8FF),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         bottom: false,
         child: RefreshIndicator(
@@ -1793,13 +1790,13 @@ class _CoachViewState extends State<CoachView> {
                   vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(999),
+                  color: colorScheme.onPrimary.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(50),
                 ),
                 child: Text(
                   'STEP $step OF $totalSteps',
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: colorScheme.onPrimary,
                     fontSize: 12,
                     fontWeight: FontWeight.w900,
                     letterSpacing: 1.1,
@@ -1809,8 +1806,8 @@ class _CoachViewState extends State<CoachView> {
               const Spacer(),
               Text(
                 '${block.minutes} min',
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: colorScheme.onPrimary,
                   fontWeight: FontWeight.w900,
                 ),
               ),
@@ -1820,7 +1817,7 @@ class _CoachViewState extends State<CoachView> {
           Text(
             block.label,
             style: theme.textTheme.headlineSmall?.copyWith(
-              color: Colors.white,
+              color: colorScheme.onPrimary,
               fontWeight: FontWeight.w900,
               height: 1.05,
             ),
@@ -1829,7 +1826,7 @@ class _CoachViewState extends State<CoachView> {
           Text(
             block.action,
             style: theme.textTheme.bodyLarge?.copyWith(
-              color: Colors.white.withValues(alpha: 0.88),
+              color: colorScheme.onPrimary.withValues(alpha: 0.88),
               fontWeight: FontWeight.w700,
               height: 1.32,
             ),
@@ -1839,9 +1836,11 @@ class _CoachViewState extends State<CoachView> {
             width: double.infinity,
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.16),
+              color: colorScheme.onPrimary.withValues(alpha: 0.16),
               borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+              border: Border.all(
+                color: colorScheme.onPrimary.withValues(alpha: 0.16),
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1849,7 +1848,7 @@ class _CoachViewState extends State<CoachView> {
                 Text(
                   'OUTPUT BEFORE MOVING ON',
                   style: theme.textTheme.labelSmall?.copyWith(
-                    color: Colors.white.withValues(alpha: 0.68),
+                    color: colorScheme.onPrimary.withValues(alpha: 0.68),
                     fontWeight: FontWeight.w900,
                     letterSpacing: 1.1,
                   ),
@@ -1858,7 +1857,7 @@ class _CoachViewState extends State<CoachView> {
                 Text(
                   block.output,
                   style: theme.textTheme.bodyMedium?.copyWith(
-                    color: Colors.white,
+                    color: colorScheme.onPrimary,
                     fontWeight: FontWeight.w900,
                     height: 1.28,
                   ),
@@ -1870,7 +1869,7 @@ class _CoachViewState extends State<CoachView> {
           Text(
             'Move on only after you have the output above. If not, stay on this step.',
             style: theme.textTheme.bodySmall?.copyWith(
-              color: Colors.white.withValues(alpha: 0.74),
+              color: colorScheme.onPrimary.withValues(alpha: 0.74),
               fontWeight: FontWeight.w700,
               height: 1.3,
             ),
@@ -1880,7 +1879,7 @@ class _CoachViewState extends State<CoachView> {
             Text(
               'Next: ${nextBlock.label} - ${nextBlock.output}',
               style: theme.textTheme.bodySmall?.copyWith(
-                color: Colors.white.withValues(alpha: 0.76),
+                color: colorScheme.onPrimary.withValues(alpha: 0.76),
                 fontWeight: FontWeight.w700,
                 height: 1.28,
               ),
@@ -1894,10 +1893,12 @@ class _CoachViewState extends State<CoachView> {
                   onPressed:
                       step == 1 ? null : () => _moveCoachStep(-1, totalSteps),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    disabledForegroundColor: Colors.white38,
+                    foregroundColor: colorScheme.onPrimary,
+                    disabledForegroundColor: colorScheme.onPrimary.withValues(
+                      alpha: 0.38,
+                    ),
                     side: BorderSide(
-                      color: Colors.white.withValues(
+                      color: colorScheme.onPrimary.withValues(
                         alpha: step == 1 ? 0.18 : 0.54,
                       ),
                     ),
@@ -1915,7 +1916,7 @@ class _CoachViewState extends State<CoachView> {
                           ? () => _startFocusSession(task)
                           : () => _moveCoachStep(1, totalSteps),
                   style: FilledButton.styleFrom(
-                    backgroundColor: Colors.white,
+                    backgroundColor: colorScheme.onPrimary,
                     foregroundColor: colorScheme.primary,
                     padding: const EdgeInsets.symmetric(vertical: 13),
                   ),

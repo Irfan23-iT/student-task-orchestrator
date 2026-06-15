@@ -67,17 +67,13 @@ class _MainScreenState extends State<MainScreen> {
         curve: Curves.easeOut,
         padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [colorScheme.primary, const Color(0xFF20E3B2)],
-          ),
-          borderRadius: BorderRadius.circular(999),
-          boxShadow: [
+          color: colorScheme.primary,
+          borderRadius: BorderRadius.circular(50),
+          boxShadow: const [
             BoxShadow(
-              color: colorScheme.primary.withValues(alpha: 0.28),
-              blurRadius: 18,
-              offset: const Offset(0, 8),
+              color: Color(0x0A000000),
+              blurRadius: 12,
+              offset: Offset(0, 4),
             ),
           ],
         ),
@@ -92,7 +88,7 @@ class _MainScreenState extends State<MainScreen> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.labelMedium?.copyWith(
-                  color: Colors.white,
+                  color: colorScheme.onPrimary,
                   fontWeight: FontWeight.w700,
                   fontSize: 12,
                 ),
@@ -156,24 +152,14 @@ class _MainScreenState extends State<MainScreen> {
       width: double.infinity,
       height: 75.0,
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface.withValues(
-          alpha: theme.brightness == Brightness.dark ? 0.92 : 0.86,
-        ),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(
-          color:
-              theme.brightness == Brightness.dark
-                  ? Colors.white.withValues(alpha: 0.08)
-                  : Colors.white.withValues(alpha: 0.70),
-        ),
-        boxShadow: [
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(50),
+        border: Border.all(color: theme.colorScheme.outline),
+        boxShadow: const [
           BoxShadow(
-            color: Colors.black.withValues(
-              alpha: theme.brightness == Brightness.dark ? 0.30 : 0.13,
-            ),
-            blurRadius: 34,
-            spreadRadius: 1,
-            offset: const Offset(0, 16),
+            color: Color(0x0A000000),
+            blurRadius: 12,
+            offset: Offset(0, 4),
           ),
         ],
       ),

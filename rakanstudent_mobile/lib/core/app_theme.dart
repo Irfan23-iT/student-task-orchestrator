@@ -1,266 +1,314 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
+/// Central design system for RakanStudent.
+///
+/// Light theme: warm cream base, pure-white cards, soft-mint secondary
+/// surfaces, and a vibrant lime accent.
+/// Dark theme: warm charcoal base, dark-gray cards, dark-mint secondary
+/// surfaces, and a slightly softened lime accent.
 class RakanAppTheme {
-  static const Color _lightPrimary = Color(0xFF4C1D95);
-  static const Color _darkPrimary = Color(0xFFA78BFA);
-  static const Color _lightBackground = Color(0xFFF4F0FF);
-  static const Color _lightSurface = Color(0xFFFFFFFF);
-  static const Color _lightSurfaceVariant = Color(0xFFEDE7FF);
-  static const Color _lightOutline = Color(0xFFD8CCF7);
-  static const Color _lightText = Color(0xFF111827);
-  static const Color _lightMutedText = Color(0xFF64748B);
+  RakanAppTheme._();
 
-  static const Color _darkBackground = Color(0xFF050711);
-  static const Color _darkSurface = Color(0xFF111827);
-  static const Color _darkSurfaceVariant = Color(0xFF1F2937);
-  static const Color _darkOutline = Color(0xFF374151);
-  static const Color _darkText = Color(0xFFFFFFFF);
-  static const Color _darkMutedText = Color(0xFFC8CEDA);
+  // ---- Light palette -------------------------------------------------------
+  static const Color _lBackground = Color(0xFFF5F5ED); // warm cream
+  static const Color _lSurface = Color(0xFFFFFFFF); // pure white
+  static const Color _lSurfaceVariant = Color(0xFFE8F2E7); // soft mint
+  static const Color _lPrimary = Color(0xFFCDEB40); // vibrant lime
+  static const Color _lSecondary = Color(0xFFB3D236); // darker lime
+  static const Color _lTertiary = Color(0xFF9EE2B8); // medium mint
+  static const Color _lText = Color(0xFF1C1C1C); // near black
+  static const Color _lMutedText = Color(0xFF7A7A7A); // medium gray
+  static const Color _lOutline = Color(0x337A7A7A); // gray @20%
 
-  static const Color _coral = Color(0xFFFF7A59);
-  static const Color _mint = Color(0xFF20E3B2);
-  static const Color _error = Color(0xFFBA1A1A);
+  // ---- Dark palette --------------------------------------------------------
+  static const Color _dBackground = Color(0xFF13130F); // warm deep charcoal
+  static const Color _dSurface = Color(0xFF1E1E18); // elevated card
+  static const Color _dSurfaceVariant = Color(0xFF2A3024); // olive-mint card
+  static const Color _dPrimary = Color(0xFFCDEB40); // vivid brand lime
+  static const Color _dSecondary = Color(0xFFB3D236); // darker lime
+  static const Color _dTertiary = Color(0xFF8FBF9C); // soft sage
+  static const Color _dText = Color(0xFFF3F3EC); // warm off-white
+  static const Color _dMutedText = Color(0xFF9E9E94); // warm gray
+  static const Color _dOutline = Color(0x29FFFFFF); // light hairline ~16%
 
-  static final ThemeData lightTheme = ThemeData(
-    useMaterial3: true,
+  // ---- Shared semantic -----------------------------------------------------
+  static const Color _error = Color(0xFFE5484D);
+
+  // ---- Shape tokens --------------------------------------------------------
+  static const double radiusCard = 30; // structural cards 28-32
+  static const double radiusPill = 50; // chips, buttons, nav
+  static const double radiusInput = 28;
+
+  /// Subtle elevation token used across the app.
+  static List<BoxShadow> get softShadow => const [
+    BoxShadow(
+      color: Color(0x0A000000),
+      blurRadius: 12,
+      offset: Offset(0, 4),
+    ),
+  ];
+
+  static final ThemeData lightTheme = _buildTheme(
     brightness: Brightness.light,
-    scaffoldBackgroundColor: _lightBackground,
-    colorScheme: const ColorScheme(
-      brightness: Brightness.light,
-      primary: _lightPrimary,
-      onPrimary: Colors.white,
-      secondary: Color(0xFFFF7A59),
-      onSecondary: Color(0xFF42170E),
-      tertiary: _mint,
-      onTertiary: Color(0xFF0C332A),
+    background: _lBackground,
+    surface: _lSurface,
+    surfaceVariant: _lSurfaceVariant,
+    primary: _lPrimary,
+    secondary: _lSecondary,
+    tertiary: _lTertiary,
+    text: _lText,
+    mutedText: _lMutedText,
+    outline: _lOutline,
+    onPrimary: _lText,
+  );
+
+  static final ThemeData darkTheme = _buildTheme(
+    brightness: Brightness.dark,
+    background: _dBackground,
+    surface: _dSurface,
+    surfaceVariant: _dSurfaceVariant,
+    primary: _dPrimary,
+    secondary: _dSecondary,
+    tertiary: _dTertiary,
+    text: _dText,
+    mutedText: _dMutedText,
+    outline: _dOutline,
+    onPrimary: const Color(0xFF1A1A14),
+  );
+
+  static ThemeData _buildTheme({
+    required Brightness brightness,
+    required Color background,
+    required Color surface,
+    required Color surfaceVariant,
+    required Color primary,
+    required Color secondary,
+    required Color tertiary,
+    required Color text,
+    required Color mutedText,
+    required Color outline,
+    required Color onPrimary,
+  }) {
+    final colorScheme = ColorScheme(
+      brightness: brightness,
+      primary: primary,
+      onPrimary: onPrimary,
+      primaryContainer: surfaceVariant,
+      onPrimaryContainer: text,
+      secondary: secondary,
+      onSecondary: onPrimary,
+      secondaryContainer: surfaceVariant,
+      onSecondaryContainer: text,
+      tertiary: tertiary,
+      onTertiary: onPrimary,
+      tertiaryContainer: surfaceVariant,
+      onTertiaryContainer: text,
       error: _error,
       onError: Colors.white,
-      errorContainer: Color(0xFFFFE3E3),
-      onErrorContainer: Color(0xFF8E1B1B),
-      primaryContainer: Color(0xFFEDE7FF),
-      onPrimaryContainer: _lightPrimary,
-      secondaryContainer: Color(0xFFFFE6DF),
-      onSecondaryContainer: Color(0xFF7A2A2A),
-      tertiaryContainer: Color(0xFFDFFCF6),
-      onTertiaryContainer: Color(0xFF145345),
-      surface: _lightSurface,
-      onSurface: _lightText,
-      surfaceContainerHighest: _lightSurfaceVariant,
-      onSurfaceVariant: _lightMutedText,
-      outline: _lightOutline,
-    ),
-    textTheme: _textTheme(
-      headline: _lightText,
-      body: _lightText,
-      muted: _lightMutedText,
-    ),
-    appBarTheme: AppBarTheme(
-      centerTitle: true,
-      elevation: 0,
-      backgroundColor: Colors.transparent,
-      foregroundColor: _lightText,
-      surfaceTintColor: Colors.transparent,
-      titleTextStyle: const TextStyle(
-        color: _lightText,
-        fontSize: 20,
-        fontWeight: FontWeight.w800,
-      ),
-      iconTheme: const IconThemeData(color: _lightText),
-    ),
-    cardTheme: CardThemeData(
-      color: _lightSurface,
-      elevation: 0,
-      shadowColor: Colors.black.withValues(alpha: 0.08),
-      surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-    ),
-    bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-      backgroundColor: _lightSurface,
-      selectedItemColor: _lightPrimary,
-      unselectedItemColor: _lightMutedText,
-    ),
-    chipTheme: _chipTheme(
-      background: _lightSurfaceVariant,
-      foreground: _lightMutedText,
-      selectedBackground: Color(0xFFE7EBFF),
-      selectedForeground: _lightPrimary,
-    ),
-    dialogTheme: DialogThemeData(
-      backgroundColor: _lightSurface,
-      surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-    ),
-    inputDecorationTheme: InputDecorationTheme(
-      filled: true,
-      fillColor: _lightSurface,
-      labelStyle: const TextStyle(color: _lightMutedText),
-      hintStyle: const TextStyle(color: _lightMutedText),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(22)),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(22),
-        borderSide: const BorderSide(color: _lightOutline),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(22),
-        borderSide: const BorderSide(color: _lightPrimary, width: 1.6),
-      ),
-    ),
-    filledButtonTheme: FilledButtonThemeData(
-      style: FilledButton.styleFrom(
-        backgroundColor: _lightPrimary,
-        foregroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
-      ),
-    ),
-    outlinedButtonTheme: OutlinedButtonThemeData(
-      style: OutlinedButton.styleFrom(
-        foregroundColor: _lightPrimary,
-        side: const BorderSide(color: _lightOutline),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
-      ),
-    ),
-    switchTheme: SwitchThemeData(
-      thumbColor: WidgetStateProperty.resolveWith((states) {
-        return states.contains(WidgetState.selected) ? _coral : _lightMutedText;
-      }),
-      trackColor: WidgetStateProperty.resolveWith((states) {
-        return states.contains(WidgetState.selected)
-            ? _lightPrimary.withValues(alpha: 0.30)
-            : _lightMutedText.withValues(alpha: 0.24);
-      }),
-    ),
-  );
+      errorContainer: const Color(0xFFFFE3E3),
+      onErrorContainer: const Color(0xFF8E1B1B),
+      surface: surface,
+      onSurface: text,
+      surfaceContainerHighest: surfaceVariant,
+      onSurfaceVariant: mutedText,
+      outline: outline,
+    );
 
-  static final ThemeData darkTheme = ThemeData(
-    useMaterial3: true,
-    brightness: Brightness.dark,
-    scaffoldBackgroundColor: _darkBackground,
-    colorScheme: const ColorScheme(
-      brightness: Brightness.dark,
-      primary: _darkPrimary,
-      onPrimary: Color(0xFF07133F),
-      secondary: Color(0xFFFFA7A7),
-      onSecondary: Color(0xFF4A1212),
-      tertiary: Color(0xFF9AF2D8),
-      onTertiary: Color(0xFF082F26),
-      error: Color(0xFFFFB4AB),
-      onError: Color(0xFF690005),
-      errorContainer: Color(0xFF4D1B1F),
-      onErrorContainer: Color(0xFFFFDAD6),
-      primaryContainer: Color(0xFF25315F),
-      onPrimaryContainer: Color(0xFFDDE4FF),
-      secondaryContainer: Color(0xFF4B2A33),
-      onSecondaryContainer: Color(0xFFFFD9DD),
-      tertiaryContainer: Color(0xFF183D37),
-      onTertiaryContainer: Color(0xFFC7FFF0),
-      surface: _darkSurface,
-      onSurface: _darkText,
-      surfaceContainerHighest: _darkSurfaceVariant,
-      onSurfaceVariant: _darkMutedText,
-      outline: _darkOutline,
-    ),
-    textTheme: _textTheme(
-      headline: _darkText,
-      body: _darkText,
-      muted: _darkMutedText,
-    ),
-    appBarTheme: AppBarTheme(
-      centerTitle: true,
-      elevation: 0,
-      backgroundColor: _darkBackground,
-      foregroundColor: _darkText,
-      surfaceTintColor: Colors.transparent,
-      titleTextStyle: const TextStyle(
-        color: _darkText,
-        fontSize: 20,
-        fontWeight: FontWeight.w800,
+    return ThemeData(
+      useMaterial3: true,
+      brightness: brightness,
+      scaffoldBackgroundColor: background,
+      colorScheme: colorScheme,
+      textTheme: _textTheme(headline: text, body: text, muted: mutedText),
+      appBarTheme: AppBarTheme(
+        centerTitle: true,
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        foregroundColor: text,
+        surfaceTintColor: Colors.transparent,
+        titleTextStyle: GoogleFonts.poppins(
+          color: text,
+          fontSize: 20,
+          fontWeight: FontWeight.w700,
+        ),
+        iconTheme: IconThemeData(color: text),
       ),
-      iconTheme: const IconThemeData(color: _darkText),
-    ),
-    cardTheme: CardThemeData(
-      color: _darkSurface,
-      elevation: 0,
-      shadowColor: Colors.black.withValues(alpha: 0.28),
-      surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-    ),
-    bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-      backgroundColor: _darkSurface,
-      selectedItemColor: _darkPrimary,
-      unselectedItemColor: _darkMutedText,
-    ),
-    chipTheme: _chipTheme(
-      background: _darkSurfaceVariant,
-      foreground: _darkMutedText,
-      selectedBackground: Color(0xFF25315F),
-      selectedForeground: _darkPrimary,
-    ),
-    dialogTheme: DialogThemeData(
-      backgroundColor: _darkSurface,
-      surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-    ),
-    inputDecorationTheme: InputDecorationTheme(
-      filled: true,
-      fillColor: _darkSurfaceVariant,
-      labelStyle: const TextStyle(color: _darkMutedText),
-      hintStyle: const TextStyle(color: _darkMutedText),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(24)),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(24),
-        borderSide: const BorderSide(color: _darkOutline),
+      cardTheme: CardThemeData(
+        color: surface,
+        elevation: 0,
+        shadowColor: const Color(0x0A000000),
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(radiusCard),
+        ),
       ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(24),
-        borderSide: const BorderSide(color: _darkPrimary, width: 1.6),
+      bottomNavigationBarTheme: BottomNavigationBarThemeData(
+        backgroundColor: surface,
+        selectedItemColor: primary,
+        unselectedItemColor: mutedText,
       ),
-    ),
-    filledButtonTheme: FilledButtonThemeData(
-      style: FilledButton.styleFrom(
-        backgroundColor: _darkPrimary,
-        foregroundColor: const Color(0xFF07133F),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+      chipTheme: _chipTheme(
+        background: surfaceVariant,
+        foreground: mutedText,
+        selectedBackground: primary,
+        selectedForeground: onPrimary,
       ),
-    ),
-    outlinedButtonTheme: OutlinedButtonThemeData(
-      style: OutlinedButton.styleFrom(
-        foregroundColor: _darkPrimary,
-        side: const BorderSide(color: _darkOutline),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+      dialogTheme: DialogThemeData(
+        backgroundColor: surface,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(radiusCard),
+        ),
       ),
-    ),
-    switchTheme: SwitchThemeData(
-      thumbColor: WidgetStateProperty.resolveWith((states) {
-        return states.contains(WidgetState.selected)
-            ? _darkPrimary
-            : _darkMutedText;
-      }),
-      trackColor: WidgetStateProperty.resolveWith((states) {
-        return states.contains(WidgetState.selected)
-            ? _darkPrimary.withValues(alpha: 0.45)
-            : _darkMutedText.withValues(alpha: 0.20);
-      }),
-    ),
-  );
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: surfaceVariant,
+        labelStyle: TextStyle(color: mutedText),
+        hintStyle: TextStyle(color: mutedText),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 20,
+          vertical: 18,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(radiusInput),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(radiusInput),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(radiusInput),
+          borderSide: BorderSide(color: primary, width: 1.6),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: primary,
+          foregroundColor: onPrimary,
+          textStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(radiusPill),
+          ),
+        ),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: primary,
+          foregroundColor: onPrimary,
+          elevation: 0,
+          textStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(radiusPill),
+          ),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: text,
+          side: BorderSide(color: outline),
+          textStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(radiusPill),
+          ),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: text,
+          textStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+        ),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith((states) {
+          return states.contains(WidgetState.selected) ? primary : mutedText;
+        }),
+        trackColor: WidgetStateProperty.resolveWith((states) {
+          return states.contains(WidgetState.selected)
+              ? primary.withValues(alpha: 0.40)
+              : mutedText.withValues(alpha: 0.24);
+        }),
+      ),
+      dividerTheme: DividerThemeData(color: outline, thickness: 1),
+    );
+  }
 
   static TextTheme _textTheme({
     required Color headline,
     required Color body,
     required Color muted,
   }) {
-    return TextTheme(
-      displaySmall: TextStyle(color: headline, fontWeight: FontWeight.w900),
-      headlineMedium: TextStyle(color: headline, fontWeight: FontWeight.w800),
-      headlineSmall: TextStyle(color: headline, fontWeight: FontWeight.w800),
-      titleLarge: TextStyle(color: headline, fontWeight: FontWeight.w800),
-      titleMedium: TextStyle(color: headline, fontWeight: FontWeight.w700),
-      titleSmall: TextStyle(color: headline, fontWeight: FontWeight.w700),
-      bodyLarge: TextStyle(color: body, fontWeight: FontWeight.w500),
-      bodyMedium: TextStyle(color: body, fontWeight: FontWeight.w500),
-      bodySmall: TextStyle(color: muted, fontWeight: FontWeight.w500),
-      labelLarge: TextStyle(color: body, fontWeight: FontWeight.w700),
-      labelMedium: TextStyle(color: muted, fontWeight: FontWeight.w700),
-      labelSmall: TextStyle(color: muted, fontWeight: FontWeight.w700),
+    final base = GoogleFonts.poppinsTextTheme();
+    return base.copyWith(
+      displayLarge: base.displayLarge?.copyWith(
+        color: headline,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.5,
+      ),
+      displayMedium: base.displayMedium?.copyWith(
+        color: headline,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.5,
+      ),
+      displaySmall: base.displaySmall?.copyWith(
+        color: headline,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.5,
+      ),
+      headlineLarge: base.headlineLarge?.copyWith(
+        color: headline,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.5,
+      ),
+      headlineMedium: base.headlineMedium?.copyWith(
+        color: headline,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.5,
+      ),
+      headlineSmall: base.headlineSmall?.copyWith(
+        color: headline,
+        fontWeight: FontWeight.w700,
+      ),
+      titleLarge: base.titleLarge?.copyWith(
+        color: headline,
+        fontWeight: FontWeight.w700,
+      ),
+      titleMedium: base.titleMedium?.copyWith(
+        color: headline,
+        fontWeight: FontWeight.w600,
+      ),
+      titleSmall: base.titleSmall?.copyWith(
+        color: headline,
+        fontWeight: FontWeight.w600,
+      ),
+      bodyLarge: base.bodyLarge?.copyWith(
+        color: body,
+        fontWeight: FontWeight.w500,
+      ),
+      bodyMedium: base.bodyMedium?.copyWith(
+        color: body,
+        fontWeight: FontWeight.w500,
+      ),
+      bodySmall: base.bodySmall?.copyWith(
+        color: muted,
+        fontWeight: FontWeight.w500,
+      ),
+      labelLarge: base.labelLarge?.copyWith(
+        color: body,
+        fontWeight: FontWeight.w600,
+      ),
+      labelMedium: base.labelMedium?.copyWith(
+        color: muted,
+        fontWeight: FontWeight.w600,
+      ),
+      labelSmall: base.labelSmall?.copyWith(
+        color: muted,
+        fontWeight: FontWeight.w600,
+      ),
     );
   }
 
@@ -274,13 +322,15 @@ class RakanAppTheme {
       backgroundColor: background,
       selectedColor: selectedBackground,
       disabledColor: background.withValues(alpha: 0.52),
-      labelStyle: TextStyle(color: foreground, fontWeight: FontWeight.w700),
+      labelStyle: TextStyle(color: foreground, fontWeight: FontWeight.w600),
       secondaryLabelStyle: TextStyle(
         color: selectedForeground,
-        fontWeight: FontWeight.w700,
+        fontWeight: FontWeight.w600,
       ),
       side: BorderSide.none,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(radiusPill),
+      ),
     );
   }
 }

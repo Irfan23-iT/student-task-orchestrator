@@ -163,10 +163,11 @@ class _AddCustomTaskScreenState extends State<AddCustomTaskScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     final descriptionLength = _descriptionController?.text.length ?? 0;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: colorScheme.surfaceContainerHighest,
       appBar: AppBar(
         title: const Text('Add Custom Task'),
         backgroundColor: Colors.transparent,
@@ -260,19 +261,19 @@ class _AddCustomTaskScreenState extends State<AddCustomTaskScreen> {
               onPressed: _isSaving ? null : _saveTask,
               icon:
                   _isSaving
-                      ? const SizedBox(
+                      ? SizedBox(
                         width: 18,
                         height: 18,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: colorScheme.onPrimary,
                         ),
                       )
                       : const Icon(Icons.save_rounded),
               label: const Text('Save Task'),
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF111827),
-                foregroundColor: Colors.white,
+                backgroundColor: colorScheme.primary,
+                foregroundColor: colorScheme.onPrimary,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),

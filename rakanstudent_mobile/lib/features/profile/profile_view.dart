@@ -21,6 +21,7 @@ class _ProfileViewState extends ConsumerState<ProfileView>
   final ApiService _apiService = ApiService();
 
   bool? _isCalendarConnected;
+  bool? _isDriveConnected;
 
   @override
   void initState() {
@@ -28,6 +29,7 @@ class _ProfileViewState extends ConsumerState<ProfileView>
     WidgetsBinding.instance.addObserver(this);
     ApiService.profileNameNotifier.addListener(_handleProfileNameChanged);
     _loadCalendarStatus();
+    _loadDriveStatus();
     _loadProfileName();
   }
 
@@ -42,6 +44,7 @@ class _ProfileViewState extends ConsumerState<ProfileView>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _loadCalendarStatus();
+      _loadDriveStatus();
     }
   }
 
@@ -78,6 +81,58 @@ class _ProfileViewState extends ConsumerState<ProfileView>
       setState(() {
         _isCalendarConnected = false;
       });
+    }
+  }
+
+  Future<void> _loadDriveStatus() async {
+    try {
+      final isConnected = await _apiService.fetchDriveStatus();
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _isDriveConnected = isConnected;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _isDriveConnected = false;
+      });
+    }
+  }
+
+  Future<void> _connectDrive() async {
+    try {
+      final url = await _apiService.getDriveConnectUrl();
+      if (!mounted) return;
+
+      final uri = Uri.parse(url);
+      final launched = await canLaunchUrl(uri)
+          ? await launchUrl(uri, mode: LaunchMode.externalApplication)
+          : false;
+      if (!mounted) return;
+
+      if (!launched) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Unable to open the browser. Please try again.'),
+          ),
+        );
+      }
+    } catch (error) {
+      debugPrint('[ProfileView] Drive connect failed: ${error.toString()}');
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Unable to connect Google Drive: ${error.toString()}'),
+        ),
+      );
     }
   }
 
@@ -377,24 +432,19 @@ class _ProfileViewState extends ConsumerState<ProfileView>
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final calendarConnected = _isCalendarConnected == true;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? Colors.black : const Color(0xFFF4F0FF);
-    final cardColor = isDark ? const Color(0xFF111827) : Colors.white;
-    final textColor = isDark ? Colors.white : const Color(0xFF111827);
-    final subTextColor = isDark ? Colors.grey[400] : Colors.grey[600];
-    final shadow =
-        isDark
-            ? <BoxShadow>[]
-            : [
-              BoxShadow(
-                color: const Color(0xFF4C1D95).withValues(alpha: 0.08),
-                blurRadius: 30,
-                offset: const Offset(0, 14),
-              ),
-            ];
+    final cardColor = colorScheme.surface;
+    final textColor = colorScheme.onSurface;
+    final subTextColor = colorScheme.onSurfaceVariant;
+    final shadow = <BoxShadow>[
+      BoxShadow(
+        color: colorScheme.primary.withValues(alpha: 0.08),
+        blurRadius: 30,
+        offset: const Offset(0, 14),
+      ),
+    ];
 
     return Scaffold(
-      backgroundColor: bgColor,
+      backgroundColor: theme.scaffoldBackgroundColor,
       body: SafeArea(
         bottom: false,
         child: ListView(
@@ -406,17 +456,11 @@ class _ProfileViewState extends ConsumerState<ProfileView>
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors:
-                      isDark
-                          ? const [Color(0xFF080B18), Color(0xFF241044)]
-                          : const [Color(0xFFFFFFFF), Color(0xFFEDE7FF)],
+                  colors: [colorScheme.primary, colorScheme.secondary],
                 ),
                 borderRadius: BorderRadius.circular(34),
                 border: Border.all(
-                  color:
-                      isDark
-                          ? Colors.white.withValues(alpha: 0.08)
-                          : Colors.white.withValues(alpha: 0.72),
+                  color: colorScheme.outline,
                 ),
                 boxShadow: shadow,
               ),
@@ -430,7 +474,7 @@ class _ProfileViewState extends ConsumerState<ProfileView>
                       gradient: LinearGradient(
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
-                        colors: [colorScheme.primary, const Color(0xFF20E3B2)],
+                        colors: [colorScheme.primary, colorScheme.secondary],
                       ),
                       borderRadius: BorderRadius.circular(26),
                     ),
@@ -451,7 +495,9 @@ class _ProfileViewState extends ConsumerState<ProfileView>
                         Text(
                           'Profile',
                           style: theme.textTheme.labelLarge?.copyWith(
-                            color: subTextColor,
+                            color: colorScheme.onPrimary.withValues(
+                              alpha: 0.78,
+                            ),
                             fontWeight: FontWeight.w900,
                             letterSpacing: 1.2,
                           ),
@@ -465,7 +511,7 @@ class _ProfileViewState extends ConsumerState<ProfileView>
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                                 style: theme.textTheme.titleLarge?.copyWith(
-                                  color: textColor,
+                                  color: colorScheme.onPrimary,
                                   fontWeight: FontWeight.w800,
                                 ),
                               ),
@@ -474,7 +520,7 @@ class _ProfileViewState extends ConsumerState<ProfileView>
                               onPressed: _showEditNameDialog,
                               icon: const Icon(Icons.edit_outlined),
                               tooltip: 'Edit name',
-                              color: colorScheme.onSurfaceVariant,
+                              color: colorScheme.onPrimary,
                             ),
                           ],
                         ),
@@ -482,14 +528,18 @@ class _ProfileViewState extends ConsumerState<ProfileView>
                         Text(
                           email,
                           style: theme.textTheme.bodyMedium?.copyWith(
-                            color: subTextColor,
+                            color: colorScheme.onPrimary.withValues(
+                              alpha: 0.78,
+                            ),
                           ),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           'Joined $joinedDate',
                           style: theme.textTheme.bodyMedium?.copyWith(
-                            color: subTextColor,
+                            color: colorScheme.onPrimary.withValues(
+                              alpha: 0.78,
+                            ),
                           ),
                         ),
                       ],
@@ -565,13 +615,100 @@ class _ProfileViewState extends ConsumerState<ProfileView>
                             vertical: 12,
                           ),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(999),
+                            borderRadius: BorderRadius.circular(50),
                           ),
                           elevation: 0,
                         ),
                         child: Text(calendarConnected ? 'Sync' : 'Connect'),
                       ),
                     ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: cardColor,
+                borderRadius: BorderRadius.circular(32),
+                boxShadow: shadow,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Storage',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      color: textColor,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Builder(
+                    builder: (context) {
+                      final driveConnected = _isDriveConnected == true;
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: 42,
+                            height: 42,
+                            decoration: BoxDecoration(
+                              color: colorScheme.tertiaryContainer,
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: Icon(
+                              Icons.folder_open_rounded,
+                              color: colorScheme.onTertiaryContainer,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Google Drive',
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    color: textColor,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  driveConnected
+                                      ? 'Connected'
+                                      : 'Not Connected',
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: subTextColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          FilledButton(
+                            onPressed: driveConnected
+                                ? null
+                                : _connectDrive,
+                            style: FilledButton.styleFrom(
+                              backgroundColor: colorScheme.tertiaryContainer,
+                              foregroundColor: colorScheme.onTertiaryContainer,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 18,
+                                vertical: 12,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(50),
+                              ),
+                              elevation: 0,
+                            ),
+                            child: Text(driveConnected ? 'Connected' : 'Connect'),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ],
               ),
@@ -695,7 +832,7 @@ class _ProfileViewState extends ConsumerState<ProfileView>
                   side: BorderSide.none,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(999),
+                    borderRadius: BorderRadius.circular(50),
                   ),
                 ),
                 icon: const Icon(Icons.logout_rounded),

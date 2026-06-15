@@ -51,3 +51,5 @@ rakanstudent_mobile/last_test_email.txt
 # generated native folders
 /ios
 /android
+"client_secret*.json" 
+"client_secret*.json" 

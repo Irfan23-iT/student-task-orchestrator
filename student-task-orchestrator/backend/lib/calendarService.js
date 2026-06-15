@@ -134,7 +134,6 @@ const parseOAuthState = (state) => {
 
 const buildGoogleConnectUrl = ({ userId, requestId }) => {
   ensureCalendarConfig();
-  console.log('🚨 DEBUG REDIRECT URI:', process.env.GOOGLE_CALENDAR_REDIRECT_URI);
 
   const params = new URLSearchParams({
     client_id: getGoogleClientId(),

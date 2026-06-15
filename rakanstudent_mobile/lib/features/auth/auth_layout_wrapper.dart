@@ -22,11 +22,13 @@ class AuthViewPortLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? Colors.black : const Color(0xFFF5F5F7);
-    final cardColor = isDark ? const Color(0xFF1A1A1A) : Colors.white;
-    final textColor = isDark ? Colors.white : Colors.black;
-    final subTextColor = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final bgColor = theme.scaffoldBackgroundColor;
+    final cardColor = colorScheme.surface;
+    final textColor = colorScheme.onSurface;
+    final subTextColor = colorScheme.onSurfaceVariant;
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -55,13 +57,11 @@ class AuthViewPortLayout extends StatelessWidget {
                           boxShadow:
                               isDark
                                   ? const []
-                                  : [
+                                  : const [
                                     BoxShadow(
-                                      color: Colors.black.withValues(
-                                        alpha: 0.06,
-                                      ),
-                                      blurRadius: 40,
-                                      offset: const Offset(0, 10),
+                                      color: Color(0x0A000000),
+                                      blurRadius: 12,
+                                      offset: Offset(0, 4),
                                     ),
                                   ],
                         ),
@@ -112,11 +112,10 @@ InputDecoration authInputDecoration({
   required String hintText,
   required IconData icon,
 }) {
-  final isDark = Theme.of(context).brightness == Brightness.dark;
-  final fillColor =
-      isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFF0F0F3);
-  final subTextColor = isDark ? Colors.grey.shade500 : Colors.grey.shade600;
-  const accentGlow = Color(0xFF20E3B2);
+  final colorScheme = Theme.of(context).colorScheme;
+  final fillColor = colorScheme.surfaceContainerHighest;
+  final subTextColor = colorScheme.onSurfaceVariant;
+  final accentGlow = colorScheme.primary;
 
   return InputDecoration(
     hintText: hintText,
@@ -126,30 +125,24 @@ InputDecoration authInputDecoration({
     fillColor: fillColor,
     contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
     border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(24),
+      borderRadius: BorderRadius.circular(28),
       borderSide: BorderSide.none,
     ),
     enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(24),
+      borderRadius: BorderRadius.circular(28),
       borderSide: BorderSide.none,
     ),
     focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(24),
-      borderSide: BorderSide(
-        color:
-            isDark
-                ? accentGlow.withValues(alpha: 0.5)
-                : accentGlow.withValues(alpha: 0.2),
-        width: 1.5,
-      ),
+      borderRadius: BorderRadius.circular(28),
+      borderSide: BorderSide(color: accentGlow, width: 1.6),
     ),
     errorBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(24),
-      borderSide: const BorderSide(color: Colors.redAccent),
+      borderRadius: BorderRadius.circular(28),
+      borderSide: BorderSide(color: colorScheme.error),
     ),
     focusedErrorBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(24),
-      borderSide: const BorderSide(color: Colors.redAccent, width: 1.5),
+      borderRadius: BorderRadius.circular(28),
+      borderSide: BorderSide(color: colorScheme.error, width: 1.5),
     ),
   );
 }
@@ -160,54 +153,57 @@ Widget authGradientButton({
   required VoidCallback? onPressed,
   bool isLoading = false,
 }) {
-  const brandGradient = LinearGradient(
-    colors: [Color(0xFF20E3B2), Color(0xFF00A3FF)],
-    begin: Alignment.centerLeft,
-    end: Alignment.centerRight,
-  );
-
-  return Container(
-    width: double.infinity,
-    height: 60,
-    decoration: BoxDecoration(
-      gradient: brandGradient,
-      borderRadius: BorderRadius.circular(100),
-    ),
-    child: ElevatedButton(
-      onPressed: isLoading ? null : onPressed,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.transparent,
-        disabledBackgroundColor: Colors.transparent,
-        shadowColor: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(100)),
-      ),
-      child:
-          isLoading
-              ? const SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.4,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
-                ),
-              )
-              : Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(icon, color: Colors.black, size: 22),
-                  const SizedBox(width: 10),
-                  Text(
-                    label,
-                    style: const TextStyle(
-                      color: Colors.black,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.2,
+  return Builder(
+    builder: (context) {
+      final colorScheme = Theme.of(context).colorScheme;
+      return Container(
+        width: double.infinity,
+        height: 60,
+        decoration: BoxDecoration(
+          color: colorScheme.primary,
+          borderRadius: BorderRadius.circular(50),
+        ),
+        child: ElevatedButton(
+          onPressed: isLoading ? null : onPressed,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.transparent,
+            disabledBackgroundColor: Colors.transparent,
+            shadowColor: Colors.transparent,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(50),
+            ),
+          ),
+          child:
+              isLoading
+                  ? SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.4,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        colorScheme.onPrimary,
+                      ),
                     ),
+                  )
+                  : Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(icon, color: colorScheme.onPrimary, size: 22),
+                      const SizedBox(width: 10),
+                      Text(
+                        label,
+                        style: TextStyle(
+                          color: colorScheme.onPrimary,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-    ),
+        ),
+      );
+    },
   );
 }
 
@@ -218,31 +214,17 @@ class AuthLogoMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Container(
       width: 72,
       height: 72,
       decoration: BoxDecoration(
-        color:
-            isDark
-                ? Colors.white.withValues(alpha: 0.06)
-                : Colors.white.withValues(alpha: 0.92),
+        color: colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(28),
-        border: Border.all(
-          color:
-              isDark
-                  ? Colors.white.withValues(alpha: 0.08)
-                  : Colors.black.withValues(alpha: 0.04),
-        ),
+        border: Border.all(color: colorScheme.outline),
       ),
-      child: ShaderMask(
-        shaderCallback:
-            (bounds) => const LinearGradient(
-              colors: [Color(0xFF20E3B2), Color(0xFF00A3FF)],
-            ).createShader(bounds),
-        child: Icon(icon, color: Colors.white, size: 34),
-      ),
+      child: Icon(icon, color: colorScheme.onSurface, size: 34),
     );
   }
 }
@@ -278,7 +260,7 @@ class _DataStreamBackgroundState extends State<DataStreamBackground>
   @override
   Widget build(BuildContext context) {
     if (!widget.isDark) {
-      return Container(color: const Color(0xFFF5F5F7));
+      return Container(color: Theme.of(context).scaffoldBackgroundColor);
     }
 
     return AnimatedBuilder(
@@ -328,8 +310,8 @@ class _DataStreamPainter extends CustomPainter {
         end: Alignment.bottomCenter,
         colors: [
           Colors.transparent,
-          const Color(0xFF20E3B2).withValues(alpha: opacity),
-          const Color(0xFF00A3FF).withValues(alpha: opacity * 0.5),
+          const Color(0xFFCDEB40).withValues(alpha: opacity),
+          const Color(0xFF9EE2B8).withValues(alpha: opacity * 0.5),
           Colors.transparent,
         ],
         stops: const [0, 0.4, 0.8, 1],

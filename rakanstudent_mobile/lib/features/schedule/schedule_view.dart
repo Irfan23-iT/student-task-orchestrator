@@ -197,12 +197,13 @@ class _ScheduleViewState extends State<ScheduleView> {
     int index,
   ) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     final messenger = ScaffoldMessenger.of(context);
     final accent = _accentColor(index);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardColor = isDark ? const Color(0xFF111827) : Colors.white;
-    final textColor = isDark ? Colors.white : const Color(0xFF111827);
-    final subTextColor = isDark ? Colors.grey[400] : Colors.grey[600];
+    final cardColor = colorScheme.surface;
+    final textColor = colorScheme.onSurface;
+    final subTextColor = colorScheme.onSurfaceVariant;
     final shadow =
         isDark
             ? <BoxShadow>[]
@@ -276,13 +277,13 @@ class _ScheduleViewState extends State<ScheduleView> {
                   children: [
                     _buildChip(
                       label: classItem.classType,
-                      background: const Color(0xFFF3E8FF),
-                      foreground: const Color(0xFF7C3AED),
+                      background: colorScheme.primary.withValues(alpha: 0.14),
+                      foreground: colorScheme.primary,
                     ),
                     _buildChip(
                       label: _dayLabel(classItem.dayOfWeek),
-                      background: const Color(0xFFF3F4F6),
-                      foreground: Colors.grey.shade700,
+                      background: colorScheme.surfaceContainerHighest,
+                      foreground: colorScheme.onSurfaceVariant,
                     ),
                   ],
                 ),
@@ -344,16 +345,17 @@ class _ScheduleViewState extends State<ScheduleView> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? Colors.black : const Color(0xFFF4F0FF);
-    final textColor = isDark ? Colors.white : const Color(0xFF111827);
-    final subTextColor = isDark ? Colors.grey[400] : Colors.grey[600];
+    final bgColor = Theme.of(context).scaffoldBackgroundColor;
+    final textColor = colorScheme.onSurface;
+    final subTextColor = colorScheme.onSurfaceVariant;
     final shadow =
         isDark
             ? <BoxShadow>[]
             : [
               BoxShadow(
-                color: const Color(0xFF4C1D95).withValues(alpha: 0.08),
+                color: colorScheme.primary.withValues(alpha: 0.08),
                 blurRadius: 30,
                 offset: const Offset(0, 14),
               ),
@@ -366,8 +368,8 @@ class _ScheduleViewState extends State<ScheduleView> {
         child: FloatingActionButton(
           heroTag: 'schedule-add-class-fab',
           onPressed: _showAddSubjectSheet,
-          backgroundColor: const Color(0xFF4C1D95),
-          foregroundColor: Colors.white,
+          backgroundColor: colorScheme.primary,
+          foregroundColor: colorScheme.onPrimary,
           elevation: 8,
           shape: const CircleBorder(),
           child: const Icon(Icons.add, size: 28),
@@ -388,17 +390,11 @@ class _ScheduleViewState extends State<ScheduleView> {
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors:
-                        isDark
-                            ? const [Color(0xFF080B18), Color(0xFF241044)]
-                            : const [Color(0xFFFFFFFF), Color(0xFFEDE7FF)],
+                    colors: [colorScheme.primary, colorScheme.secondary],
                   ),
                   borderRadius: BorderRadius.circular(34),
                   border: Border.all(
-                    color:
-                        isDark
-                            ? Colors.white.withValues(alpha: 0.08)
-                            : Colors.white.withValues(alpha: 0.72),
+                    color: colorScheme.outline,
                   ),
                   boxShadow: shadow,
                 ),
@@ -435,12 +431,12 @@ class _ScheduleViewState extends State<ScheduleView> {
                       width: 58,
                       height: 58,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF7C3AED).withValues(alpha: 0.14),
+                        color: colorScheme.primary.withValues(alpha: 0.14),
                         borderRadius: BorderRadius.circular(22),
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.calendar_month_rounded,
-                        color: Color(0xFF7C3AED),
+                        color: colorScheme.primary,
                       ),
                     ),
                   ],

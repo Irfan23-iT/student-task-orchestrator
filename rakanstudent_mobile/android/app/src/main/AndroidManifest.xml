@@ -35,6 +35,8 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="rakanstudent" android:host="calendar-success" />
                 <data android:scheme="rakanstudent" android:host="calendar-error" />
+                <data android:scheme="rakanstudent" android:host="drive-success" />
+                <data android:scheme="rakanstudent" android:host="drive-error" />
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

@@ -123,11 +123,12 @@ class _GachaViewState extends ConsumerState<GachaView>
   Widget build(BuildContext context) {
     final state = ref.watch(gachaControllerProvider);
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
-    final backgroundColor = isDark ? Colors.black : const Color(0xFFF5F5F7);
-    final cardColor = isDark ? const Color(0xFF1A1A1A) : Colors.white;
-    final textColor = isDark ? Colors.white : Colors.black;
-    final mutedColor = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
+    final backgroundColor = theme.scaffoldBackgroundColor;
+    final cardColor = colorScheme.surface;
+    final textColor = colorScheme.onSurface;
+    final mutedColor = colorScheme.onSurfaceVariant;
     final canPull = state.tokens > 0 && !_isRolling;
 
     return Scaffold(
@@ -190,20 +191,18 @@ class _GachaViewState extends ConsumerState<GachaView>
                         width: 168,
                         height: 168,
                         decoration: BoxDecoration(
-                          color: const Color(
-                            0xFF7C4DFF,
-                          ).withValues(alpha: isDark ? 0.22 : 0.12),
+                          color: colorScheme.primary.withValues(
+                            alpha: isDark ? 0.22 : 0.12,
+                          ),
                           borderRadius: BorderRadius.circular(36),
                           border: Border.all(
-                            color: const Color(
-                              0xFF7C4DFF,
-                            ).withValues(alpha: 0.28),
+                            color: colorScheme.primary.withValues(alpha: 0.28),
                           ),
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.card_giftcard_rounded,
                           size: 104,
-                          color: Color(0xFF7C4DFF),
+                          color: colorScheme.primary,
                         ),
                       ),
                     ),
@@ -275,10 +274,8 @@ class _GachaViewState extends ConsumerState<GachaView>
                               height: 64,
                               alignment: Alignment.center,
                               decoration: BoxDecoration(
-                                color:
-                                    isDark
-                                        ? Colors.white.withValues(alpha: 0.06)
-                                        : Colors.black.withValues(alpha: 0.06),
+                                color: colorScheme.surfaceContainerHighest
+                                    .withValues(alpha: 0.06),
                                 borderRadius: BorderRadius.circular(16),
                               ),
                               child: Text(

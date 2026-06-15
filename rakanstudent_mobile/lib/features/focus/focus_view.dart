@@ -234,19 +234,19 @@ class _FocusViewState extends ConsumerState<FocusView>
 
   Widget _buildSetupView(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final textColor = isDark ? Colors.white : Colors.black;
-    final mutedColor = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
-    final cardColor = isDark ? const Color(0xFF1A1A1A) : Colors.white;
+    final colorScheme = theme.colorScheme;
+    final textColor = colorScheme.onSurface;
+    final mutedColor = colorScheme.onSurfaceVariant;
+    final cardColor = colorScheme.surface;
 
     return Scaffold(
-      backgroundColor: isDark ? Colors.black : const Color(0xFFF5F5F7),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text(
           'Deep Work Room',
           style: TextStyle(fontWeight: FontWeight.w900),
         ),
-        backgroundColor: isDark ? Colors.black : const Color(0xFFF5F5F7),
+        backgroundColor: theme.scaffoldBackgroundColor,
         foregroundColor: textColor,
         elevation: 0,
       ),
@@ -294,7 +294,7 @@ class _FocusViewState extends ConsumerState<FocusView>
                     child: Text(
                       '$_targetDurationMinutes min',
                       style: theme.textTheme.displaySmall?.copyWith(
-                        color: const Color(0xFF20E3B2),
+                        color: colorScheme.primary,
                         fontWeight: FontWeight.w900,
                         fontFeatures: const <FontFeature>[
                           FontFeature.tabularFigures(),
@@ -317,9 +317,12 @@ class _FocusViewState extends ConsumerState<FocusView>
                             ),
                             selected: isSelected,
                             onSelected: (_) => _selectDuration(minutes),
-                            selectedColor: const Color(0xFF20E3B2),
+                            selectedColor: colorScheme.primary,
                             labelStyle: TextStyle(
-                              color: isSelected ? Colors.black : textColor,
+                              color:
+                                  isSelected
+                                      ? colorScheme.onPrimary
+                                      : textColor,
                               fontWeight: FontWeight.w800,
                             ),
                             shape: RoundedRectangleBorder(
@@ -352,8 +355,8 @@ class _FocusViewState extends ConsumerState<FocusView>
                       icon: const Icon(Icons.lock_rounded),
                       label: const Text('Enter Deep Work'),
                       style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF20E3B2),
-                        foregroundColor: Colors.black,
+                        backgroundColor: colorScheme.primary,
+                        foregroundColor: colorScheme.onPrimary,
                         padding: const EdgeInsets.symmetric(vertical: 18),
                         textStyle: const TextStyle(
                           fontSize: 16,

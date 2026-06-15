@@ -307,10 +307,11 @@ class _CalendarViewState extends State<CalendarView> {
     final dueDate = task.dueDate;
     final timeLabel =
         dueDate == null ? null : DateFormat('h:mm a').format(dueDate.toLocal());
+    final colorScheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardColor = isDark ? const Color(0xFF1A1A1A) : Colors.white;
-    final textColor = isDark ? Colors.white : Colors.black;
-    final subTextColor = isDark ? Colors.grey[400] : Colors.grey[600];
+    final cardColor = colorScheme.surface;
+    final textColor = colorScheme.onSurface;
+    final subTextColor = colorScheme.onSurfaceVariant;
     final shadow =
         isDark
             ? <BoxShadow>[]
@@ -375,10 +376,11 @@ class _CalendarViewState extends State<CalendarView> {
 
   Widget _buildClassTile(ClassSchedule classSchedule) {
     final color = _colorFromHex(classSchedule.colorHex);
+    final colorScheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardColor = isDark ? const Color(0xFF1A1A1A) : Colors.white;
-    final textColor = isDark ? Colors.white : Colors.black;
-    final subTextColor = isDark ? Colors.grey[400] : Colors.grey[600];
+    final cardColor = colorScheme.surface;
+    final textColor = colorScheme.onSurface;
+    final subTextColor = colorScheme.onSurfaceVariant;
     final shadow =
         isDark
             ? <BoxShadow>[]
@@ -463,24 +465,25 @@ class _CalendarViewState extends State<CalendarView> {
       }
     }
 
-    return const Color(0xFF8B5CF6);
+    return Theme.of(context).colorScheme.primary;
   }
 
   @override
   Widget build(BuildContext context) {
     final selectedEvents = _eventsForDay(_selectedDay);
     final selectedLabel = DateFormat('EEE, MMM d').format(_selectedDay);
+    final colorScheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? Colors.black : const Color(0xFFF4F0FF);
-    final cardColor = isDark ? const Color(0xFF111827) : Colors.white;
-    final textColor = isDark ? Colors.white : const Color(0xFF111827);
-    final subTextColor = isDark ? Colors.grey[400] : Colors.grey[600];
+    final bgColor = Theme.of(context).scaffoldBackgroundColor;
+    final cardColor = colorScheme.surface;
+    final textColor = colorScheme.onSurface;
+    final subTextColor = colorScheme.onSurfaceVariant;
     final shadow =
         isDark
             ? <BoxShadow>[]
             : [
               BoxShadow(
-                color: const Color(0xFF4C1D95).withValues(alpha: 0.08),
+                color: colorScheme.primary.withValues(alpha: 0.08),
                 blurRadius: 30,
                 offset: const Offset(0, 14),
               ),
@@ -502,17 +505,11 @@ class _CalendarViewState extends State<CalendarView> {
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors:
-                        isDark
-                            ? const [Color(0xFF080B18), Color(0xFF241044)]
-                            : const [Color(0xFFFFFFFF), Color(0xFFEDE7FF)],
+                    colors: [colorScheme.primary, colorScheme.secondary],
                   ),
                   borderRadius: BorderRadius.circular(34),
                   border: Border.all(
-                    color:
-                        isDark
-                            ? Colors.white.withValues(alpha: 0.08)
-                            : Colors.white.withValues(alpha: 0.72),
+                    color: colorScheme.outline,
                   ),
                   boxShadow: shadow,
                 ),
@@ -549,12 +546,12 @@ class _CalendarViewState extends State<CalendarView> {
                       width: 58,
                       height: 58,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF7C3AED).withValues(alpha: 0.14),
+                        color: colorScheme.primary.withValues(alpha: 0.14),
                         borderRadius: BorderRadius.circular(22),
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.event_available_rounded,
-                        color: Color(0xFF7C3AED),
+                        color: colorScheme.primary,
                       ),
                     ),
                   ],
@@ -589,22 +586,22 @@ class _CalendarViewState extends State<CalendarView> {
                         defaultTextStyle: TextStyle(color: textColor),
                         weekendTextStyle: TextStyle(color: textColor),
                         outsideTextStyle: TextStyle(
-                          color: subTextColor ?? Colors.grey,
+                          color: subTextColor,
                         ),
-                        todayDecoration: const BoxDecoration(
-                          color: Color(0xFFEDE9FE),
+                        todayDecoration: BoxDecoration(
+                          color: colorScheme.primary.withValues(alpha: 0.18),
                           shape: BoxShape.circle,
                         ),
-                        todayTextStyle: const TextStyle(
-                          color: Color(0xFF111827),
+                        todayTextStyle: TextStyle(
+                          color: colorScheme.onSurface,
                           fontWeight: FontWeight.w800,
                         ),
-                        selectedDecoration: const BoxDecoration(
-                          color: Color(0xFF111827),
+                        selectedDecoration: BoxDecoration(
+                          color: colorScheme.primary,
                           shape: BoxShape.circle,
                         ),
-                        selectedTextStyle: const TextStyle(
-                          color: Colors.white,
+                        selectedTextStyle: TextStyle(
+                          color: colorScheme.onPrimary,
                           fontWeight: FontWeight.w800,
                         ),
                       ),

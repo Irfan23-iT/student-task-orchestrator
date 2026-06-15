@@ -531,32 +531,14 @@ class _DashboardViewState extends State<DashboardView>
 
   Widget _buildStreakBadge(BuildContext context, int streak) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final colorScheme = theme.colorScheme;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors:
-              isDark
-                  ? const [Color(0xFF201436), Color(0xFF111827)]
-                  : const [Color(0xFFFFFFFF), Color(0xFFF4ECFF)],
-        ),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(
-          color: const Color(
-            0xFF8B5CF6,
-          ).withValues(alpha: isDark ? 0.30 : 0.18),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(
-              0xFF8B5CF6,
-            ).withValues(alpha: isDark ? 0.18 : 0.12),
-            blurRadius: 22,
-            offset: const Offset(0, 10),
-          ),
-        ],
+        color: colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(50),
+        border: Border.all(color: colorScheme.outline),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -570,7 +552,7 @@ class _DashboardViewState extends State<DashboardView>
           Text(
             '$streak',
             style: theme.textTheme.labelLarge?.copyWith(
-              color: isDark ? Colors.white : const Color(0xFF111827),
+              color: colorScheme.onSurface,
               fontWeight: FontWeight.w900,
             ),
           ),
@@ -611,7 +593,6 @@ class _DashboardViewState extends State<DashboardView>
   Widget _buildDailyPulseCard(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
 
     Widget buildPulse({
       required String reminderCount,
@@ -621,17 +602,9 @@ class _DashboardViewState extends State<DashboardView>
         width: double.infinity,
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color:
-              isDark
-                  ? Colors.white.withValues(alpha: 0.055)
-                  : const Color(0xFFFFFFFF),
+          color: colorScheme.surface,
           borderRadius: BorderRadius.circular(30),
-          border: Border.all(
-            color:
-                isDark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : const Color(0xFFE6DDFC),
-          ),
+          border: Border.all(color: colorScheme.outline),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -748,8 +721,8 @@ class _DashboardViewState extends State<DashboardView>
     VoidCallback? onTrailingPressed,
   }) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final subTextColor = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
+    final colorScheme = theme.colorScheme;
+    final subTextColor = colorScheme.onSurfaceVariant;
 
     return Row(
       children: [
@@ -757,12 +730,8 @@ class _DashboardViewState extends State<DashboardView>
           width: 4,
           height: 18,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(999),
-            gradient: const LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Color(0xFF7C3AED), Color(0xFF20E3B2)],
-            ),
+            borderRadius: BorderRadius.circular(50),
+            color: colorScheme.primary,
           ),
         ),
         const SizedBox(width: 10),
@@ -779,7 +748,7 @@ class _DashboardViewState extends State<DashboardView>
           TextButton(
             onPressed: onTrailingPressed,
             style: TextButton.styleFrom(
-              foregroundColor: isDark ? Colors.white : const Color(0xFF111827),
+              foregroundColor: colorScheme.onSurface,
               visualDensity: VisualDensity.compact,
             ),
             child: Text(trailing),
@@ -793,9 +762,10 @@ class _DashboardViewState extends State<DashboardView>
     required Color sprintAccent,
   }) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
-    final textColor = isDark ? Colors.white : Colors.black;
-    final baseCardColor = isDark ? const Color(0xFF111827) : Colors.white;
+    final textColor = colorScheme.onSurface;
+    final baseCardColor = colorScheme.surface;
     final tintedCardColor = Color.alphaBlend(
       sprintAccent.withValues(alpha: isDark ? 0.20 : 0.10),
       baseCardColor,
@@ -807,7 +777,7 @@ class _DashboardViewState extends State<DashboardView>
       curve: Curves.easeOutCubic,
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(28),
         child: InkWell(
           onTap: _openSprintChallenge,
           onHighlightChanged: (isPressed) {
@@ -815,35 +785,23 @@ class _DashboardViewState extends State<DashboardView>
               _isSprintCardPressed = isPressed;
             });
           },
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(28),
           child: Ink(
             width: double.infinity,
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  tintedCardColor,
-                  Color.alphaBlend(
-                    const Color(
-                      0xFF7C3AED,
-                    ).withValues(alpha: isDark ? 0.16 : 0.06),
-                    baseCardColor,
-                  ),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(24),
+              color: tintedCardColor,
+              borderRadius: BorderRadius.circular(28),
               border: Border.all(
-                color: sprintAccent.withValues(alpha: isDark ? 0.34 : 0.18),
+                color: sprintAccent.withValues(alpha: isDark ? 0.34 : 0.22),
               ),
               boxShadow:
                   isDark
                       ? null
-                      : [
+                      : const [
                         BoxShadow(
-                          color: sprintAccent.withValues(alpha: 0.14),
-                          blurRadius: 28,
-                          offset: const Offset(0, 16),
+                          color: Color(0x0A000000),
+                          blurRadius: 12,
+                          offset: Offset(0, 4),
                         ),
                       ],
             ),
@@ -894,7 +852,7 @@ class _DashboardViewState extends State<DashboardView>
                   Text(
                     'Tap to race',
                     style: theme.textTheme.labelLarge?.copyWith(
-                      color: isDark ? Colors.white70 : const Color(0xFF111827),
+                      color: colorScheme.onSurfaceVariant,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
@@ -916,22 +874,13 @@ class _DashboardViewState extends State<DashboardView>
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final channelColor = _channelColor(context, block.priority);
-    final isDark = theme.brightness == Brightness.dark;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color:
-            isDark
-                ? Colors.white.withValues(alpha: 0.045)
-                : const Color(0xFFF8FAFC),
+        color: colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color:
-              isDark
-                  ? Colors.white.withValues(alpha: 0.07)
-                  : Colors.black.withValues(alpha: 0.035),
-        ),
+        border: Border.all(color: colorScheme.outline),
       ),
       child: Padding(
         padding: const EdgeInsets.all(15),
@@ -947,7 +896,7 @@ class _DashboardViewState extends State<DashboardView>
                   end: Alignment.bottomRight,
                   colors: [
                     channelColor.withValues(alpha: 0.22),
-                    const Color(0xFF20E3B2).withValues(alpha: 0.12),
+                    colorScheme.primary.withValues(alpha: 0.12),
                   ],
                 ),
                 borderRadius: BorderRadius.circular(18),
@@ -982,7 +931,7 @@ class _DashboardViewState extends State<DashboardView>
                       ),
                       decoration: BoxDecoration(
                         color: channelColor.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(999),
+                        borderRadius: BorderRadius.circular(50),
                       ),
                       child: Text(
                         _channelLabel(block.priority),
@@ -1026,15 +975,15 @@ class _DashboardViewState extends State<DashboardView>
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
-    final cardColor = isDark ? const Color(0xFF1A1A1A) : Colors.white;
+    final cardColor = colorScheme.surface;
     final shadow =
         isDark
             ? <BoxShadow>[]
-            : [
+            : const [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 24,
-                offset: const Offset(0, 8),
+                color: Color(0x0A000000),
+                blurRadius: 12,
+                offset: Offset(0, 4),
               ),
             ];
 
@@ -1078,7 +1027,7 @@ class _DashboardViewState extends State<DashboardView>
             Text(
               'No active reminders right now',
               style: theme.textTheme.bodyMedium?.copyWith(
-                color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                color: colorScheme.onSurfaceVariant,
               ),
             ),
           );
@@ -1101,23 +1050,22 @@ class _DashboardViewState extends State<DashboardView>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
-    final bgColor = isDark ? Colors.black : const Color(0xFFF4F0FF);
-    final cardColor = isDark ? const Color(0xFF111827) : Colors.white;
-    final textColor = isDark ? Colors.white : Colors.black;
-    final subTextColor = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
+    final bgColor = theme.scaffoldBackgroundColor;
+    final textColor = colorScheme.onSurface;
+    final subTextColor = colorScheme.onSurfaceVariant;
     final shadow =
         isDark
             ? <BoxShadow>[]
-            : [
+            : const [
               BoxShadow(
-                color: const Color(0xFF4C1D95).withValues(alpha: 0.08),
-                blurRadius: 30,
-                offset: const Offset(0, 14),
+                color: Color(0x0A000000),
+                blurRadius: 12,
+                offset: Offset(0, 4),
               ),
             ];
-    final sprintAccent =
-        isDark ? const Color(0xFFFFCA28) : const Color(0xFFFF8F00);
+    final sprintAccent = colorScheme.primary;
     final fallbackDisplayName = _resolveDisplayName();
     final currentStreak = _currentStreak;
 
@@ -1141,24 +1089,17 @@ class _DashboardViewState extends State<DashboardView>
                       end: Alignment.bottomRight,
                       colors:
                           isDark
-                              ? const [
-                                Color(0xFF080B18),
-                                Color(0xFF241044),
-                                Color(0xFF063B3D),
+                              ? [
+                                colorScheme.surface,
+                                colorScheme.surfaceContainerHighest,
                               ]
-                              : const [
-                                Color(0xFFFFFFFF),
-                                Color(0xFFEDE7FF),
-                                Color(0xFFDFFCF6),
+                              : [
+                                colorScheme.surface,
+                                colorScheme.surfaceContainerHighest,
                               ],
                     ),
-                    borderRadius: BorderRadius.circular(34),
-                    border: Border.all(
-                      color:
-                          isDark
-                              ? Colors.white.withValues(alpha: 0.08)
-                              : Colors.white.withValues(alpha: 0.72),
-                    ),
+                    borderRadius: BorderRadius.circular(32),
+                    border: Border.all(color: colorScheme.outline),
                     boxShadow: shadow,
                   ),
                   child: Column(
@@ -1224,20 +1165,9 @@ class _DashboardViewState extends State<DashboardView>
                               const SizedBox(height: 10),
                               Container(
                                 decoration: BoxDecoration(
-                                  color: cardColor.withValues(
-                                    alpha: isDark ? 0.70 : 0.92,
-                                  ),
+                                  color: colorScheme.surface,
                                   shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color:
-                                        isDark
-                                            ? Colors.white.withValues(
-                                              alpha: 0.08,
-                                            )
-                                            : Colors.black.withValues(
-                                              alpha: 0.04,
-                                            ),
-                                  ),
+                                  border: Border.all(color: colorScheme.outline),
                                 ),
                                 child: IconButton(
                                   onPressed: () => _signOut(context),
@@ -1259,19 +1189,11 @@ class _DashboardViewState extends State<DashboardView>
                           width: double.infinity,
                           padding: const EdgeInsets.all(6),
                           decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [
-                                Color(0xFF20E3B2),
-                                Color(0xFF00A3FF),
-                                Color(0xFF7C3AED),
-                              ],
-                              begin: Alignment.centerLeft,
-                              end: Alignment.centerRight,
-                            ),
+                            color: colorScheme.primary,
                             borderRadius: BorderRadius.circular(28),
                           ),
                           child: Material(
-                            color: Colors.black.withValues(alpha: 0.82),
+                            color: const Color(0xFF1C1C1C),
                             borderRadius: BorderRadius.circular(23),
                             child: InkWell(
                               borderRadius: BorderRadius.circular(23),

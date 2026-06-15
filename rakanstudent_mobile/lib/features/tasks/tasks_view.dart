@@ -1175,7 +1175,7 @@ class _TasksViewState extends ConsumerState<TasksView> {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: background,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(50),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1198,19 +1198,16 @@ class _TasksViewState extends ConsumerState<TasksView> {
   }
 
   Widget _buildTaskCard(BuildContext context, Task task) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardColor = isDark ? const Color(0xFF1A1A1A) : Colors.white;
-    final textColor = isDark ? Colors.white : Colors.black;
-    final shadow =
-        isDark
-            ? <BoxShadow>[]
-            : [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 24,
-                offset: const Offset(0, 8),
-              ),
-            ];
+    final colorScheme = Theme.of(context).colorScheme;
+    final cardColor = colorScheme.surface;
+    final textColor = colorScheme.onSurface;
+    final shadow = [
+      BoxShadow(
+        color: Colors.black.withValues(alpha: 0.04),
+        blurRadius: 24,
+        offset: const Offset(0, 8),
+      ),
+    ];
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -1251,8 +1248,8 @@ class _TasksViewState extends ConsumerState<TasksView> {
               Checkbox(
                 value: task.isCompleted,
                 shape: const CircleBorder(),
-                activeColor: const Color(0xFF8B5CF6),
-                side: BorderSide(color: Colors.grey.shade400, width: 1.6),
+                activeColor: colorScheme.primary,
+                side: BorderSide(color: colorScheme.onSurfaceVariant, width: 1.6),
                 visualDensity: VisualDensity.compact,
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 onChanged: (value) {
@@ -1290,7 +1287,7 @@ class _TasksViewState extends ConsumerState<TasksView> {
                                   ? '${task.estimatedMinutes} min'
                                   : 'Duration unknown',
                           background: const Color(0xFFF3F4F6),
-                          foreground: Colors.grey.shade700,
+                          foreground: colorScheme.onSurfaceVariant,
                           icon: Icons.schedule_rounded,
                         ),
                       ],
@@ -1318,15 +1315,16 @@ class _TasksViewState extends ConsumerState<TasksView> {
     required int completedTasks,
     required List<BoxShadow> shadow,
   }) {
+    final colorScheme = Theme.of(context).colorScheme;
     final totalTasks = _tasks.length;
 
     return Container(
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF111827), Color(0xFF4C1D95)],
+          colors: [colorScheme.primary, colorScheme.secondary],
         ),
         borderRadius: BorderRadius.circular(32),
         boxShadow: shadow,
@@ -1341,10 +1339,10 @@ class _TasksViewState extends ConsumerState<TasksView> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Today’s Focus',
                       style: TextStyle(
-                        color: Colors.white70,
+                        color: colorScheme.onPrimary.withValues(alpha: 0.7),
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -1353,8 +1351,8 @@ class _TasksViewState extends ConsumerState<TasksView> {
                       remainingTasks == 0
                           ? 'All clear'
                           : '$remainingTasks task${remainingTasks == 1 ? '' : 's'} left',
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: colorScheme.onPrimary,
                         fontSize: 30,
                         fontWeight: FontWeight.w900,
                         letterSpacing: -0.8,
@@ -1365,8 +1363,8 @@ class _TasksViewState extends ConsumerState<TasksView> {
                       totalTasks == 0
                           ? 'Use Add Task to capture your first task.'
                           : '$completedTasks completed out of $totalTasks total tasks.',
-                      style: const TextStyle(
-                        color: Colors.white70,
+                      style: TextStyle(
+                        color: colorScheme.onPrimary.withValues(alpha: 0.7),
                         height: 1.35,
                         fontWeight: FontWeight.w500,
                       ),
@@ -1378,12 +1376,12 @@ class _TasksViewState extends ConsumerState<TasksView> {
                 width: 58,
                 height: 58,
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.12),
+                  color: colorScheme.onPrimary.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(22),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.task_alt_rounded,
-                  color: Colors.white,
+                  color: colorScheme.onPrimary,
                   size: 30,
                 ),
               ),
@@ -1398,8 +1396,8 @@ class _TasksViewState extends ConsumerState<TasksView> {
                   icon: const Icon(Icons.add_rounded),
                   label: const Text('Add Task'),
                   style: FilledButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: const Color(0xFF111827),
+                    backgroundColor: colorScheme.onPrimary,
+                    foregroundColor: colorScheme.primary,
                     padding: const EdgeInsets.symmetric(vertical: 15),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(18),
@@ -1419,6 +1417,7 @@ class _TasksViewState extends ConsumerState<TasksView> {
   }
 
   Widget _buildUtilityActions() {
+    final colorScheme = Theme.of(context).colorScheme;
     return Wrap(
       spacing: 12,
       runSpacing: 12,
@@ -1428,8 +1427,8 @@ class _TasksViewState extends ConsumerState<TasksView> {
           child: _TaskUtilityButton(
             icon: _isSyncingCalendar ? null : Icons.sync_rounded,
             label: _isSyncingCalendar ? 'Syncing...' : 'Sync Calendar',
-            foreground: const Color(0xFF7C3AED),
-            background: const Color(0xFFF3E8FF),
+            foreground: colorScheme.primary,
+            background: colorScheme.surfaceContainerHighest,
             onPressed: _isSyncingCalendar ? null : _syncTasksToCalendar,
             busy: _isSyncingCalendar,
           ),
@@ -1439,8 +1438,8 @@ class _TasksViewState extends ConsumerState<TasksView> {
           child: _TaskUtilityButton(
             icon: _isImportingDrive ? null : Icons.cloud_download_rounded,
             label: _isImportingDrive ? 'Importing...' : 'Import Drive',
-            foreground: const Color(0xFF2563EB),
-            background: const Color(0xFFDBEAFE),
+            foreground: colorScheme.primary,
+            background: colorScheme.surfaceContainerHighest,
             onPressed: _isImportingDrive ? null : _importFromDrive,
             busy: _isImportingDrive,
           ),
@@ -1463,20 +1462,18 @@ class _TasksViewState extends ConsumerState<TasksView> {
   Widget build(BuildContext context) {
     final remainingTasks = _remainingTasksCount;
     final completedTasks = _tasks.length - remainingTasks;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? Colors.black : const Color(0xFFF4F0FF);
-    final textColor = isDark ? Colors.white : const Color(0xFF111827);
-    final subTextColor = isDark ? Colors.grey[400] : Colors.grey[600];
-    final shadow =
-        isDark
-            ? <BoxShadow>[]
-            : [
-              BoxShadow(
-                color: const Color(0xFF4C1D95).withValues(alpha: 0.08),
-                blurRadius: 30,
-                offset: const Offset(0, 14),
-              ),
-            ];
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final bgColor = theme.scaffoldBackgroundColor;
+    final textColor = colorScheme.onSurface;
+    final subTextColor = colorScheme.onSurfaceVariant;
+    final shadow = [
+      BoxShadow(
+        color: colorScheme.primary.withValues(alpha: 0.08),
+        blurRadius: 30,
+        offset: const Offset(0, 14),
+      ),
+    ];
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -1682,6 +1679,7 @@ class _FlashcardsDialogState extends State<_FlashcardsDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
     return Dialog.fullscreen(
       child: SafeArea(
@@ -1730,17 +1728,20 @@ class _FlashcardsDialogState extends State<_FlashcardsDialog> {
                       padding: const EdgeInsets.symmetric(horizontal: 6),
                       child: DecoratedBox(
                         decoration: BoxDecoration(
-                          gradient: const LinearGradient(
+                          gradient: LinearGradient(
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
-                            colors: [Color(0xFF111827), Color(0xFF4C1D95)],
+                            colors: [
+                              colorScheme.primary,
+                              colorScheme.secondary,
+                            ],
                           ),
                           borderRadius: BorderRadius.circular(30),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(
-                                0xFF4C1D95,
-                              ).withValues(alpha: 0.28),
+                              color: colorScheme.primary.withValues(
+                                alpha: 0.28,
+                              ),
                               blurRadius: 30,
                               offset: const Offset(0, 16),
                             ),
@@ -1753,8 +1754,10 @@ class _FlashcardsDialogState extends State<_FlashcardsDialog> {
                             children: [
                               Text(
                                 'Card ${index + 1} of ${widget.flashcards.length}',
-                                style: const TextStyle(
-                                  color: Color(0xFFDDD6FE),
+                                style: TextStyle(
+                                  color: colorScheme.onPrimary.withValues(
+                                    alpha: 0.8,
+                                  ),
                                   fontWeight: FontWeight.w800,
                                 ),
                               ),
@@ -1762,7 +1765,7 @@ class _FlashcardsDialogState extends State<_FlashcardsDialog> {
                               Text(
                                 flashcard.front,
                                 style: theme.textTheme.headlineSmall?.copyWith(
-                                  color: Colors.white,
+                                  color: colorScheme.onPrimary,
                                   fontWeight: FontWeight.w900,
                                 ),
                               ),
@@ -1771,16 +1774,18 @@ class _FlashcardsDialogState extends State<_FlashcardsDialog> {
                                 width: double.infinity,
                                 padding: const EdgeInsets.all(18),
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.1),
+                                  color: colorScheme.onPrimary.withValues(
+                                    alpha: 0.1,
+                                  ),
                                   borderRadius: BorderRadius.circular(22),
                                   border: Border.all(
-                                    color: Colors.white.withValues(alpha: 0.12),
+                                    color: colorScheme.outline,
                                   ),
                                 ),
                                 child: Text(
                                   flashcard.back,
                                   style: theme.textTheme.titleMedium?.copyWith(
-                                    color: Colors.white,
+                                    color: colorScheme.onPrimary,
                                     height: 1.4,
                                     fontWeight: FontWeight.w700,
                                   ),
@@ -1819,7 +1824,7 @@ class _FlashcardsDialogState extends State<_FlashcardsDialog> {
                                 selected
                                     ? theme.colorScheme.primary
                                     : theme.colorScheme.outlineVariant,
-                            borderRadius: BorderRadius.circular(999),
+                            borderRadius: BorderRadius.circular(50),
                           ),
                         );
                       }),
