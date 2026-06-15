@@ -5,6 +5,7 @@ import {
 } from '@google/genai';
 import { createRequire } from 'module';
 import { serviceSupabase } from '../config/supabase.js';
+import { saveChatMessage } from './aiChatController.js';
 
 const _require = createRequire(import.meta.url);
 const _pdfParse = _require('pdf-parse');
@@ -74,6 +75,57 @@ const generateGeminiText = async ({
         systemInstruction,
         ...(responseMimeType ? { responseMimeType } : {}),
       },
+    });
+
+  try {
+    const response = await generate(primaryModelName);
+    return response.text || '';
+  } catch (error) {
+    const message = String(error?.message || '');
+    const shouldRetryWithFallback =
+      error?.status === 503 ||
+      /service unavailable|high demand|overloaded|temporarily unavailable/i.test(
+        message,
+      );
+
+    if (!shouldRetryWithFallback || primaryModelName === fallbackModelName) {
+      throw error;
+    }
+
+    console.warn(
+      `[AI] Primary model ${primaryModelName} unavailable. Retrying with ${fallbackModelName}.`,
+    );
+    const fallbackResponse = await generate(fallbackModelName);
+    return fallbackResponse.text || '';
+  }
+};
+
+const generateGeminiChatText = async ({
+  systemInstruction,
+  history = [],
+  newMessage,
+}) => {
+  const ai = getGeminiClient();
+  const primaryModelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  const fallbackModelName = 'gemini-2.5-flash';
+
+  const contents = [];
+  for (const msg of history) {
+    contents.push({
+      role: msg.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: msg.content }],
+    });
+  }
+  contents.push({
+    role: 'user',
+    parts: [{ text: newMessage }],
+  });
+
+  const generate = (modelName) =>
+    ai.models.generateContent({
+      model: modelName,
+      contents,
+      config: { systemInstruction },
     });
 
   try {
@@ -988,6 +1040,7 @@ export const buildChatFallbackResponse = (message, tasks, now = new Date()) => {
 export const createAiChatResponse = async ({
   message,
   tasks,
+  history = [],
   generateText = generateGeminiText,
   now = new Date(),
 }) => {
@@ -999,8 +1052,19 @@ export const createAiChatResponse = async ({
   }
 
   const systemInstruction = buildChatSystemPrompt(tasks, now);
-  const prompt = `User message: ${trimmedMessage}`;
-  const responseText = await generateText({ systemInstruction, prompt });
+
+  let responseText;
+  if (history.length > 0) {
+    responseText = await generateGeminiChatText({
+      systemInstruction,
+      history,
+      newMessage: trimmedMessage,
+    });
+  } else {
+    const prompt = `User message: ${trimmedMessage}`;
+    responseText = await generateText({ systemInstruction, prompt });
+  }
+
   const extracted = extractActionDirective(
     String(responseText || '').trim() ||
       buildChatFallbackResponse(trimmedMessage, tasks, now),
@@ -1093,6 +1157,46 @@ export const chatWithAi = async (req, res) => {
       });
     }
 
+    let chatId = req.body?.chatId || null;
+    let chatHistory = [];
+
+    if (chatId) {
+      const { data: existingChat, error: chatCheckError } = await db
+        .from('ai_chats')
+        .select('id')
+        .eq('id', chatId)
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (chatCheckError) throw chatCheckError;
+      if (!existingChat) {
+        return res.status(404).json({ error: 'Chat not found.' });
+      }
+
+      const { data: historyRows, error: historyError } = await db
+        .from('ai_messages')
+        .select('role, content')
+        .eq('chat_id', chatId)
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (historyError) throw historyError;
+      chatHistory = (historyRows || []).reverse();
+    } else {
+      const { data: newChat, error: createError } = await db
+        .from('ai_chats')
+        .insert({
+          user_id: userId,
+          title: message.length > 40 ? `${message.slice(0, 40).trimEnd()}…` : message,
+        })
+        .select('id')
+        .single();
+
+      if (createError) throw createError;
+      chatId = newChat.id;
+    }
+
     const { data: tasks, error } = await db
       .from('tasks')
       .select('id, user_id, title, description, due_date, priority_level, status, created_at')
@@ -1104,10 +1208,21 @@ export const chatWithAi = async (req, res) => {
 
     if (error) throw error;
 
+    await saveChatMessage(db, {
+      chatId,
+      userId,
+      role: 'user',
+      content: message,
+    });
+
     let payload;
     let actionTask = null;
     try {
-      payload = await createAiChatResponse({ message, tasks: tasks || [] });
+      payload = await createAiChatResponse({
+        message,
+        tasks: tasks || [],
+        history: chatHistory,
+      });
     } catch (aiError) {
       console.error('AI Chat LLM Failed:', aiError.message || aiError);
       payload = {
@@ -1129,8 +1244,19 @@ export const chatWithAi = async (req, res) => {
     }
 
     const { action, ...clientPayload } = payload;
+
+    await saveChatMessage(db, {
+      chatId,
+      userId,
+      role: 'assistant',
+      content: clientPayload.response,
+      actionType: actionTask ? 'CREATE_TASK' : null,
+      actionPerformed: Boolean(actionTask),
+    });
+
     res.status(200).json({
       ...clientPayload,
+      chatId,
       actionPerformed: Boolean(actionTask),
       actionType: actionTask ? 'CREATE_TASK' : null,
       task: actionTask,

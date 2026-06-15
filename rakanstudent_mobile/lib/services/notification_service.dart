@@ -83,4 +83,41 @@ class NotificationService {
       }
     }
   }
+
+  Future<void> scheduleReminder({
+    required int id,
+    required String title,
+    required DateTime scheduledAt,
+  }) async {
+    await initialize();
+
+    final now = DateTime.now();
+    if (!scheduledAt.isAfter(now)) {
+      return;
+    }
+
+    await _notifications.zonedSchedule(
+      id,
+      'Reminder',
+      title,
+      tz.TZDateTime.from(scheduledAt, tz.local),
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'scheduled_reminders',
+          'Scheduled Reminders',
+          channelDescription: 'Reminders scheduled from the task manager.',
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+      ),
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+    );
+  }
+
+  Future<void> cancelReminder(int id) async {
+    await initialize();
+    await _notifications.cancel(id);
+  }
 }

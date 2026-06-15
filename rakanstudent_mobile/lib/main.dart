@@ -9,6 +9,7 @@ import 'core/theme_provider.dart';
 import 'features/auth/login_screen.dart';
 import 'features/home/main_screen.dart';
 import 'services/api_service.dart';
+import 'services/reminder_sync_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -59,6 +60,7 @@ class _StartupGate extends StatelessWidget {
         }
 
         if (snapshot.data ?? false) {
+          ReminderSyncService.instance.startPeriodicSync();
           return const MainScreen();
         }
 

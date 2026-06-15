@@ -108,11 +108,13 @@ class AiChatResponse {
     required this.message,
     required this.actionPerformed,
     this.actionType,
+    this.chatId,
   });
 
   final String message;
   final bool actionPerformed;
   final String? actionType;
+  final String? chatId;
 }
 
 class FlashcardDto {
@@ -1360,7 +1362,7 @@ class ApiService {
     return decoded['task'] as Map<String, dynamic>? ?? decoded;
   }
 
-  Future<AiChatResponse> sendChatMessage(String message) async {
+  Future<AiChatResponse> sendChatMessage(String message, {String? chatId}) async {
     final trimmedMessage = message.trim();
     if (trimmedMessage.isEmpty) {
       throw ArgumentError('Message is required.');
@@ -1368,7 +1370,10 @@ class ApiService {
 
     final headers = await _getHeaders();
     final url = '$baseUrl/ai/chat';
-    final body = {'message': trimmedMessage};
+    final body = <String, dynamic>{'message': trimmedMessage};
+    if (chatId != null) {
+      body['chatId'] = chatId;
+    }
     var response = await _retryRequest(
       () => http
           .post(Uri.parse(url), headers: headers, body: jsonEncode(body))
@@ -1416,7 +1421,175 @@ class ApiService {
       message: aiResponse,
       actionPerformed: actionPerformed,
       actionType: decoded['actionType']?.toString(),
+      chatId: decoded['chatId']?.toString(),
     );
+  }
+
+  Future<List<Map<String, dynamic>>> listAiChats() async {
+    final headers = await _getHeaders();
+    final url = '$baseUrl/ai/chats';
+    var response = await _retryRequest(
+      () => http.get(Uri.parse(url), headers: headers).timeout(_requestTimeout),
+    );
+
+    if (response.statusCode == 401) {
+      final refreshedToken = await _getValidAccessToken(forceRefresh: true);
+      response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+          if (refreshedToken != null) 'Authorization': 'Bearer $refreshedToken',
+        },
+      ).timeout(_requestTimeout);
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('Failed to load chats (${response.statusCode})');
+    }
+
+    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    return (decoded['chats'] as List<dynamic>?)
+            ?.map((e) => e as Map<String, dynamic>)
+            .toList() ??
+        [];
+  }
+
+  Future<Map<String, dynamic>> getAiChat(String chatId) async {
+    final headers = await _getHeaders();
+    final url = '$baseUrl/ai/chats/$chatId';
+    var response = await _retryRequest(
+      () => http.get(Uri.parse(url), headers: headers).timeout(_requestTimeout),
+    );
+
+    if (response.statusCode == 401) {
+      final refreshedToken = await _getValidAccessToken(forceRefresh: true);
+      response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+          if (refreshedToken != null) 'Authorization': 'Bearer $refreshedToken',
+        },
+      ).timeout(_requestTimeout);
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('Failed to load chat (${response.statusCode})');
+    }
+
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> createAiChat({String title = 'New Chat'}) async {
+    final headers = await _getHeaders();
+    final url = '$baseUrl/ai/chats';
+    var response = await _retryRequest(
+      () => http
+          .post(Uri.parse(url), headers: headers, body: jsonEncode({'title': title}))
+          .timeout(_requestTimeout),
+    );
+
+    if (response.statusCode == 401) {
+      final refreshedToken = await _getValidAccessToken(forceRefresh: true);
+      response = await http.post(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+          if (refreshedToken != null) 'Authorization': 'Bearer $refreshedToken',
+        },
+        body: jsonEncode({'title': title}),
+      ).timeout(_requestTimeout);
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('Failed to create chat (${response.statusCode})');
+    }
+
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Future<void> deleteAiChat(String chatId) async {
+    final headers = await _getHeaders();
+    final url = '$baseUrl/ai/chats/$chatId';
+    var response = await _retryRequest(
+      () => http.delete(Uri.parse(url), headers: headers).timeout(_requestTimeout),
+    );
+
+    if (response.statusCode == 401) {
+      final refreshedToken = await _getValidAccessToken(forceRefresh: true);
+      response = await http.delete(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+          if (refreshedToken != null) 'Authorization': 'Bearer $refreshedToken',
+        },
+      ).timeout(_requestTimeout);
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('Failed to delete chat (${response.statusCode})');
+    }
+  }
+
+  Future<void> renameAiChat(String chatId, String title) async {
+    final headers = await _getHeaders();
+    final url = '$baseUrl/ai/chats/$chatId';
+    var response = await _retryRequest(
+      () => http
+          .patch(Uri.parse(url), headers: headers, body: jsonEncode({'title': title}))
+          .timeout(_requestTimeout),
+    );
+
+    if (response.statusCode == 401) {
+      final refreshedToken = await _getValidAccessToken(forceRefresh: true);
+      response = await http.patch(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+          if (refreshedToken != null) 'Authorization': 'Bearer $refreshedToken',
+        },
+        body: jsonEncode({'title': title}),
+      ).timeout(_requestTimeout);
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('Failed to rename chat (${response.statusCode})');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> listReminders({String? status}) async {
+    final headers = await _getHeaders();
+    var url = '$baseUrl/analytics/reminders';
+    if (status != null) url += '?status=$status';
+    var response = await _retryRequest(
+      () => http.get(Uri.parse(url), headers: headers).timeout(_requestTimeout),
+    );
+
+    if (response.statusCode == 401) {
+      final refreshedToken = await _getValidAccessToken(forceRefresh: true);
+      response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+          if (refreshedToken != null) 'Authorization': 'Bearer $refreshedToken',
+        },
+      ).timeout(_requestTimeout);
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('Failed to load reminders (${response.statusCode})');
+    }
+
+    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    return (decoded['reminders'] as List<dynamic>?)
+            ?.map((e) => e as Map<String, dynamic>)
+            .toList() ??
+        [];
   }
 
   Future<AiChatResponse> sendVoiceTask(String voiceText) async {

@@ -415,6 +415,36 @@ export const upsertNotificationPreferences = async (req, res) => {
   }
 };
 
+export const listReminders = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const status = req.query.status || null;
+    const limit = Math.min(Number.parseInt(req.query.limit, 10) || 50, 100);
+
+    let query = supabase
+      .from('reminder_jobs')
+      .select('*')
+      .eq('user_id', userId)
+      .order('reminder_at', { ascending: true })
+      .limit(limit);
+
+    if (status) {
+      query = query.eq('status', status);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    res.status(200).json({ reminders: data || [] });
+  } catch (error) {
+    const statusCode = Number(error.statusCode || 500);
+    res.status(statusCode).json({
+      error: 'Failed to list reminders',
+      details: error.message
+    });
+  }
+};
+
 export const createReminder = async (req, res) => {
   try {
     const userId = req.user.id;
