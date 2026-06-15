@@ -35,6 +35,11 @@ const getErrorStatusCode = (error) => {
   return 500;
 };
 
+const isSchemaColumnError = (error) => {
+  const message = String(error?.message || '').toLowerCase();
+  return message.includes('schema cache') || message.includes('pgrst204');
+};
+
 const normalizeDayOfWeek = (value) => {
   const dayMap = {
     1: 'MON',
@@ -213,14 +218,22 @@ export const bulkCreateFixedClasses = async (req, res) => {
       lecturer: item.lecturer
     }));
 
-    const { data, error } = await db
+    let result = await db
       .from('fixed_classes')
       .insert(insertPayload)
       .select('*');
 
-    if (error) throw error;
+    if (result.error && isSchemaColumnError(result.error)) {
+      const leanPayload = insertPayload.map(({ location, lecturer, ...rest }) => rest);
+      result = await db
+        .from('fixed_classes')
+        .insert(leanPayload)
+        .select('*');
+    }
 
-    res.status(201).json({ classes: normalizeRows(data || []) });
+    if (result.error) throw result.error;
+
+    res.status(201).json({ classes: normalizeRows(result.data || []) });
   } catch (error) {
     const statusCode = getErrorStatusCode(error);
     console.error('Fixed Class Save Failed:', error.message, 'Payload received:', req.body);
@@ -250,28 +263,41 @@ export const updateFixedClass = async (req, res) => {
       excludeClassId: classId
     });
 
-    const { data, error } = await db
+    const updatePayload = {
+      day_of_week: normalizedClass.day_of_week,
+      start_time: normalizedClass.start_time,
+      end_time: normalizedClass.end_time,
+      class_name: normalizedClass.class_name,
+      class_type: normalizedClass.class_type,
+      location: normalizedClass.location,
+      lecturer: normalizedClass.lecturer
+    };
+
+    let result = await db
       .from('fixed_classes')
-      .update({
-        day_of_week: normalizedClass.day_of_week,
-        start_time: normalizedClass.start_time,
-        end_time: normalizedClass.end_time,
-        class_name: normalizedClass.class_name,
-        class_type: normalizedClass.class_type,
-        location: normalizedClass.location,
-        lecturer: normalizedClass.lecturer
-      })
+      .update(updatePayload)
       .eq('id', classId)
       .eq('user_id', req.user.id)
       .select('*')
       .maybeSingle();
 
-    if (error) throw error;
-    if (!data) {
+    if (result.error && isSchemaColumnError(result.error)) {
+      const { location, lecturer, ...leanPayload } = updatePayload;
+      result = await db
+        .from('fixed_classes')
+        .update(leanPayload)
+        .eq('id', classId)
+        .eq('user_id', req.user.id)
+        .select('*')
+        .maybeSingle();
+    }
+
+    if (result.error) throw result.error;
+    if (!result.data) {
       return res.status(404).json({ error: 'Class not found.' });
     }
 
-    res.status(200).json({ class: normalizeRows([data])[0] });
+    res.status(200).json({ class: normalizeRows([result.data])[0] });
   } catch (error) {
     const statusCode = getErrorStatusCode(error);
     console.error('Fixed Class Update Failed:', error.message, 'Class:', req.params?.id, 'Payload received:', req.body);
