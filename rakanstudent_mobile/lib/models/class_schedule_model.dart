@@ -8,6 +8,8 @@ class ClassSchedule {
     String? className,
     required this.colorHex,
     this.classType,
+    this.location,
+    this.lecturer,
   }) : courseName = courseName ?? className ?? 'Untitled class';
 
   final String id;
@@ -17,6 +19,8 @@ class ClassSchedule {
   final String courseName;
   final String colorHex;
   final String? classType;
+  final String? location;
+  final String? lecturer;
 
   String get className => courseName;
 
@@ -35,6 +39,8 @@ class ClassSchedule {
               .toString(),
       classType: _asNullableString(json['class_type'] ?? json['classType']),
       colorHex: _normalizeColorHex(json['color_hex'] ?? json['colorHex']),
+      location: _asNullableString(json['location']),
+      lecturer: _asNullableString(json['lecturer']),
     );
   }
 

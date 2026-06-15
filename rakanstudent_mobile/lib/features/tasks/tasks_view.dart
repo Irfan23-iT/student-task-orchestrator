@@ -984,7 +984,7 @@ class _TasksViewState extends ConsumerState<TasksView> {
 
       final request = http.MultipartRequest(
         'POST',
-        Uri.parse('${ApiService.baseUrl}/timetable/parse'),
+        Uri.parse('${ApiService.baseUrl}/ai/pdf-tasks'),
       );
       request.headers.addAll(await _apiService.authHeaders());
 
@@ -1022,23 +1022,24 @@ class _TasksViewState extends ConsumerState<TasksView> {
       if (streamedResponse.statusCode >= 200 &&
           streamedResponse.statusCode < 300) {
         final decoded = jsonDecode(responseBody) as Map<String, dynamic>;
-        final data = decoded['data'] as List<dynamic>? ?? [];
+        final tasks = decoded['tasks'] as List<dynamic>? ?? [];
+        final message = decoded['message']?.toString() ?? '';
 
-        if (data.isNotEmpty) {
+        if (tasks.isNotEmpty) {
           ApiService.notifyTaskMutation();
           await _fetchTasks();
           if (!mounted) return;
           messenger.showSnackBar(
             SnackBar(
               content: Text(
-                'Imported ${data.length} class${data.length == 1 ? '' : 'es'} from PDF.',
+                message.isNotEmpty ? message : 'Created ${tasks.length} task${tasks.length == 1 ? '' : 's'} from PDF.',
               ),
             ),
           );
         } else {
           messenger.showSnackBar(
-            const SnackBar(
-              content: Text('No tasks found in the PDF. Try a different file.'),
+            SnackBar(
+              content: Text(message.isNotEmpty ? message : 'No tasks found in the PDF. Try a different file.'),
             ),
           );
         }

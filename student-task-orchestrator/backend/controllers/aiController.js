@@ -3,7 +3,11 @@ import {
   createPartFromBase64,
   createPartFromText,
 } from '@google/genai';
+import { createRequire } from 'module';
 import { serviceSupabase } from '../config/supabase.js';
+
+const _require = createRequire(import.meta.url);
+const _pdfParse = _require('pdf-parse');
 
 const SYSTEM_PROMPT =
   'You are the RakanStudent AI orchestrator. Break the user\'s complex goal down into 3-5 actionable sub-tasks. Return ONLY a valid JSON array of objects. Each object must have "title" (string), "description" (string), "duration_minutes" (integer), and "priority" (string: High, Medium, Low).';
@@ -131,34 +135,33 @@ export const buildChatSystemPrompt = (tasks, now = new Date()) => {
   }));
 
   return [
-    'You are an autonomous system that manages a database. You MUST use the ACTION block to create tasks when requested.',
+    'You are Rakan, a friendly and knowledgeable AI study assistant for university students.',
+    'You help students manage their academic life, study effectively, and stay organized.',
     '',
-    'EXAMPLE 1:',
-    'User: "Create a study task for me"',
-    'AI Response: ACTION: {"type": "CREATE_TASK", "data": {"title": "Study Session", "due_date": null, "priority_level": "Medium"}} I have created a study task for you.',
+    '## What you can do:',
+    '- Answer questions about any topic (study tips, concepts, explanations, advice)',
+    '- Help students plan and organize their work',
+    '- Create tasks when the student asks you to add/plan/schedule something',
+    '- Discuss academic topics, explain concepts, help with study strategies',
+    '- Give motivational support when students feel overwhelmed',
     '',
-    'EXAMPLE 2:',
-    'User: "yes do that" (in context of adding a task)',
-    'AI Response: ACTION: {"type": "CREATE_TASK", "data": {"title": "Review notes", "due_date": null, "priority_level": "Medium"}} Done, I\'ve added the task to your list.',
+    '## How to respond:',
+    '- Be conversational, warm, and helpful — like a smart friend who studies together',
+    '- Give direct, useful answers — not generic advice',
+    '- Keep responses concise but informative (2-4 sentences for simple questions, longer if explaining a concept)',
+    '- If the student asks a question (e.g. "What is photosynthesis?", "How do I study for exams?"), ANSWER IT directly',
+    '- Do NOT redirect every conversation back to tasks. Only mention tasks when relevant.',
     '',
-    'You are an autonomous executive assistant with direct database write access.',
-    'You do not give the user instructions to do things you can do yourself.',
-    'Answer as a concise study coach using only the authenticated user task context below.',
-    'CRITICAL: If the user asks to plan, schedule, remind, create, or add a task, YOU MUST automatically generate the ACTION JSON block.',
-    'CRITICAL: If the user states they have an upcoming event, exam, class, meeting, deadline, appointment, or study need, YOU MUST automatically generate the ACTION JSON block.',
-    'Do not ask the user to manually create, add, schedule, or plan something you can create with ACTION.',
-    'Forbidden phrases: "Add this to your list", "To get started, create a task", "Make sure to schedule", "You should add", "Create a task for", "Manually add".',
-    'If the user gives a broad goal, break it down into a specific next task and create that task with ACTION, then confirm naturally.',
-    'The user-visible response must confirm what you scheduled or created. It must not tell the user to do the scheduling themselves.',
-    'The ACTION line must be exactly: ACTION: {"type":"CREATE_TASK","data":{"title":"...","priority_level":"High|Medium|Low","due_date":"ISO-8601 date string or null"}}',
-    'Use the current app-local date and time below to resolve relative dates. If the user gives a time, include it in due_date. If no priority is obvious, use Medium.',
-    'Never show the ACTION JSON as part of the human-facing confirmation.',
-    'When the user asks what they have to do today, list tasks due today first, then undated active tasks if useful.',
-    'If no relevant tasks exist, say that clearly and suggest one small next action.',
-    `Current app timezone: ${timeZone}.`,
-    `Current app-local date: ${today}.`,
-    `Current app-local time: ${currentTime}.`,
-    `Current authenticated user tasks JSON: ${JSON.stringify(taskContext)}`,
+    '## Task creation:',
+    'When the student explicitly asks to create, add, schedule, or plan a task, use an ACTION block.',
+    'Also use ACTION when the student mentions an upcoming exam, deadline, or assignment they need to prepare for.',
+    'Format: ACTION: {"type":"CREATE_TASK","data":{"title":"...","priority_level":"High|Medium|Low","due_date":"YYYY-MM-DD or null"}}',
+    'Place the ACTION block at the END of your response. Never show it as part of the conversation.',
+    'Do NOT create tasks for general questions or casual conversation.',
+    '',
+    `## Student context:`,
+    `Timezone: ${timeZone}. Today: ${today}. Time: ${currentTime}.`,
+    `Active tasks: ${JSON.stringify(taskContext)}`,
   ].join('\n');
 };
 
@@ -946,33 +949,40 @@ export const buildChatFallbackResponse = (message, tasks, now = new Date()) => {
   const dueToday = activeTasks.filter((task) =>
     String(task.due_date || '').startsWith(today),
   );
-  const relevantTasks = dueToday.length > 0 ? dueToday : activeTasks;
 
-  if (/today|do i have|to do|task/.test(normalizedMessage)) {
-    if (relevantTasks.length === 0) {
-      return 'You do not have any active tasks in your task list right now.';
+  // Task-related queries
+  if (/today|do i have|to do|task|what.*due|schedule/.test(normalizedMessage)) {
+    if (activeTasks.length === 0) {
+      return 'You have no active tasks right now. Would you like me to help you plan something?';
     }
 
     const intro =
       dueToday.length > 0
-        ? 'Here is what you have to do today:'
-        : 'I do not see tasks due today, but these active tasks are on your list:';
-    const lines = relevantTasks
+        ? `You have ${dueToday.length} task${dueToday.length === 1 ? '' : 's'} due today:`
+        : 'No tasks due today, but here are your active tasks:';
+    const lines = activeTasks
       .slice(0, 6)
-      .map((task) => `- ${task.title}${task.priority_level ? ` (${task.priority_level})` : ''}`);
+      .map((task) => `- ${task.title}${task.due_date ? ` (due ${task.due_date.slice(0, 10)})` : ''}${task.priority_level ? ` [${task.priority_level}]` : ''}`);
     return [intro, ...lines].join('\n');
   }
 
-  if (relevantTasks.length === 0) {
-    return 'I do not see any active tasks yet. Add one task first, then I can help you plan it.';
+  // Help/greeting
+  if (/^(hi|hello|hey|help|what can you do|how are you)/.test(normalizedMessage)) {
+    return "Hey! I'm Rakan, your study assistant. I can help you with:\n- Answering questions about any topic\n- Creating and managing tasks\n- Study tips and planning advice\n- Explaining concepts\n\nWhat would you like help with?";
   }
 
-  return [
-    'Based on your current tasks, start with:',
-    ...relevantTasks
-      .slice(0, 3)
-      .map((task) => `- ${task.title}${task.due_date ? ` due ${task.due_date.slice(0, 10)}` : ''}`),
-  ].join('\n');
+  // Study-related questions
+  if (/study|exam|test|revise|revision|focus|concentrate|memorize/.test(normalizedMessage)) {
+    return "Here are some proven study strategies:\n- Use active recall: test yourself instead of re-reading notes\n- Space your practice over multiple days (spaced repetition)\n- Break study sessions into 25-min focused blocks (Pomodoro)\n- Teach the concept to someone else — it reveals gaps in understanding\n\nWant me to create a study task for you?";
+  }
+
+  // Time management
+  if (/time management|procrastinate|overwhelm|stress|too much|busy/.test(normalizedMessage)) {
+    return "When things feel overwhelming, try this:\n1. Brain-dump everything you need to do\n2. Pick the ONE most important thing\n3. Work on it for just 15 minutes — momentum builds from there\n\nWould you like me to help you prioritize your tasks?";
+  }
+
+  // Generic helpful response
+  return "I'm here to help! Feel free to ask me about:\n- Any topic you're studying (I can explain concepts)\n- Creating tasks or planning your schedule\n- Study tips and strategies\n- Academic advice\n\nWhat's on your mind?";
 };
 
 export const createAiChatResponse = async ({
@@ -1131,6 +1141,201 @@ export const chatWithAi = async (req, res) => {
     res.status(statusCode).json({
       error: statusCode === 400 ? error.message : 'Failed to chat with AI.',
       details: error.message || 'Unknown AI chat error.',
+    });
+  }
+};
+
+const VOICE_TASK_PROMPT = [
+  'You are a task extraction engine. A student spoke a voice note. Extract exactly ONE task from it.',
+  'Return ONLY valid JSON. No markdown, no prose, no explanations.',
+  'The JSON must be exactly this shape:',
+  '{"title":"short task title","description":"brief description or null","due_date":"YYYY-MM-DD or null","due_time":"HH:MM or null","priority_level":"High|Medium|Low"}',
+  'Rules:',
+  '- title: concise action phrase (e.g. "Buy groceries", "Study for math exam")',
+  '- due_date: if the user says "tomorrow", "next Monday", "Friday", etc., resolve to an actual YYYY-MM-DD date relative to the current date provided below.',
+  '- due_time: extract if mentioned (e.g. "at 3pm" -> "15:00"), otherwise null.',
+  '- priority_level: High if urgent/exam/deadline, Medium if normal, Low if casual. Default Medium.',
+  '- If the voice note is NOT a task (e.g. a question or greeting), still extract a reasonable task from it.',
+  'Current date: {{CURRENT_DATE}}.',
+  'Current time: {{CURRENT_TIME}}.',
+].join('\n');
+
+export const voiceToTask = async (req, res) => {
+  try {
+    const voiceText = String(req.body?.text ?? req.body?.message ?? '').trim();
+    if (!voiceText) {
+      return res.status(400).json({
+        error: 'Voice text is required.',
+        details: 'Provide the transcribed voice text in the request body.',
+      });
+    }
+
+    const userId = req.user.id;
+    const db = req.supabase;
+    if (!db) {
+      return res.status(500).json({
+        error: 'Authenticated Supabase client is missing.',
+      });
+    }
+
+    const now = new Date();
+    const currentDate = now.toISOString().slice(0, 10);
+    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    const systemInstruction = VOICE_TASK_PROMPT
+      .replace('{{CURRENT_DATE}}', currentDate)
+      .replace('{{CURRENT_TIME}}', currentTime);
+
+    let aiText;
+    try {
+      aiText = await generateGeminiText({
+        systemInstruction,
+        prompt: `Voice note: "${voiceText}"`,
+        responseMimeType: 'application/json',
+      });
+    } catch (aiError) {
+      console.error('Voice task AI failed:', aiError.message || aiError);
+      return res.status(200).json({
+        actionPerformed: false,
+        message: 'Could not process the voice note. Please try again.',
+        task: null,
+      });
+    }
+
+    let parsed;
+    try {
+      const cleaned = String(aiText || '').trim()
+        .replace(/^```(?:json)?\s*/i, '')
+        .replace(/\s*```$/i, '');
+      parsed = JSON.parse(cleaned);
+    } catch {
+      console.error('Voice task JSON parse failed. Raw:', aiText);
+      return res.status(200).json({
+        actionPerformed: false,
+        message: 'I understood the note but could not structure it as a task.',
+        task: null,
+      });
+    }
+
+    const title = String(parsed?.title || '').trim();
+    if (!title) {
+      return res.status(200).json({
+        actionPerformed: false,
+        message: 'Could not extract a task title from the voice note.',
+        task: null,
+      });
+    }
+
+    const insertPayload = {
+      user_id: userId,
+      title,
+      description: parsed?.description ? String(parsed.description).trim() : null,
+      due_date: parsed?.due_date || null,
+      priority_level: normalizeTaskPriority(parsed?.priority_level),
+      status: 'TODO',
+    };
+
+    let result = await db
+      .from('tasks')
+      .insert(insertPayload)
+      .select('id, user_id, title, description, due_date, priority_level, status, created_at')
+      .single();
+
+    if (result.error && isSchemaColumnError(result.error)) {
+      const { description, ...leanPayload } = insertPayload;
+      result = await db
+        .from('tasks')
+        .insert(leanPayload)
+        .select('id, user_id, title, priority_level, status, created_at')
+        .single();
+    }
+
+    if (result.error) {
+      console.error('Voice task DB insert failed:', result.error);
+      return res.status(200).json({
+        actionPerformed: false,
+        message: 'Failed to save the task. Please try again.',
+        task: null,
+      });
+    }
+
+    res.status(200).json({
+      actionPerformed: true,
+      message: `Task created: "${title}"`,
+      task: result.data,
+    });
+  } catch (error) {
+    console.error('Voice Task Failed:', error.message || error);
+    res.status(500).json({
+      error: 'Failed to process voice task.',
+      details: error.message || 'Unknown error.',
+    });
+  }
+};
+
+export const pdfToTasks = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const db = req.supabase;
+    if (!db) {
+      return res.status(500).json({
+        error: 'Authenticated Supabase client is missing.',
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({
+        error: 'PDF file is required.',
+        details: 'Upload a PDF file with field name "file".',
+      });
+    }
+
+    const isPdf = req.file.mimetype === 'application/pdf' ||
+      String(req.file.originalname || '').toLowerCase().endsWith('.pdf');
+    if (!isPdf) {
+      return res.status(400).json({
+        error: 'Only PDF files are accepted.',
+      });
+    }
+
+    let rawText = '';
+    try {
+      const parser = new _pdfParse(req.file.buffer);
+      rawText = await parser.getText();
+    } catch (parseError) {
+      console.error('PDF text extraction failed:', parseError.message);
+      return res.status(400).json({
+        error: 'Could not extract text from the PDF.',
+        details: parseError.message,
+      });
+    }
+
+    if (!rawText.trim()) {
+      return res.status(200).json({
+        actionPerformed: false,
+        message: 'The PDF appears to be empty or contains only images.',
+        tasks: [],
+      });
+    }
+
+    const result = await createTasksFromAcademicText({
+      text: rawText,
+      sourceName: req.file.originalname || 'uploaded PDF',
+      db,
+      userId,
+    });
+
+    res.status(200).json({
+      actionPerformed: result.tasks.length > 0,
+      message: result.message,
+      tasks: result.tasks,
+      actionsParsed: result.actionsParsed,
+    });
+  } catch (error) {
+    console.error('PDF to Tasks Failed:', error.message || error);
+    res.status(500).json({
+      error: 'Failed to process PDF for tasks.',
+      details: error.message || 'Unknown error.',
     });
   }
 };

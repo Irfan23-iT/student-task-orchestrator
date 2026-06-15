@@ -1015,6 +1015,8 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
           final startTime = _extractStartTime(extracted['time'] ?? extracted['start_time']);
           final endTime = _extractEndTime(extracted['time'] ?? extracted['end_time']);
           final classType = (extracted['class_type'] ?? 'Lect').toString().trim();
+          final location = (extracted['location'] ?? '').toString().trim();
+          final lecturer = (extracted['lecturer'] ?? '').toString().trim();
 
           final key = '$day-$startTime-$subject';
           if (existingKeys.contains(key)) continue;
@@ -1028,6 +1030,8 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
                 endTime: endTime,
                 className: subject,
                 classType: classType,
+                location: location.isNotEmpty ? location : null,
+                lecturer: lecturer.isNotEmpty ? lecturer : null,
               ),
             );
             addedCount++;
@@ -1093,6 +1097,12 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
         classType: _classTypeController.text.trim().isNotEmpty
             ? _classTypeController.text.trim()
             : 'Lecture',
+        location: _locationController.text.trim().isNotEmpty
+            ? _locationController.text.trim()
+            : null,
+        lecturer: _lecturerController.text.trim().isNotEmpty
+            ? _lecturerController.text.trim()
+            : null,
       );
 
       await _apiService.saveFixedClass(classModel);

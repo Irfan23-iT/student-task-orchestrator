@@ -9,13 +9,15 @@ import {
 } from '../lib/calendarService.js';
 
 const normalizeRows = (rows = []) =>
-  rows.map(({ id, day_of_week, start_time, end_time, class_name, class_type, created_at, updated_at }) => ({
+  rows.map(({ id, day_of_week, start_time, end_time, class_name, class_type, location, lecturer, created_at, updated_at }) => ({
     id,
     day_of_week,
     start_time,
     end_time,
     class_name,
     class_type,
+    location,
+    lecturer,
     created_at,
     updated_at
   }));
@@ -101,7 +103,9 @@ const normalizeClassPayload = (item = {}) => {
     start_time: normalizeTimeForStorage(rawStartTime, startMinutes),
     end_time: formatMinutesAsTime(endMinutes),
     class_name: String(item.class_name ?? item.className ?? '').trim(),
-    class_type: normalizeClassType(item.class_type ?? item.classType)
+    class_type: normalizeClassType(item.class_type ?? item.classType),
+    location: String(item.location ?? '').trim() || null,
+    lecturer: String(item.lecturer ?? '').trim() || null
   };
 };
 
@@ -204,7 +208,9 @@ export const bulkCreateFixedClasses = async (req, res) => {
       start_time: item.start_time,
       end_time: item.end_time,
       class_name: item.class_name,
-      class_type: item.class_type
+      class_type: item.class_type,
+      location: item.location,
+      lecturer: item.lecturer
     }));
 
     const { data, error } = await db
@@ -251,7 +257,9 @@ export const updateFixedClass = async (req, res) => {
         start_time: normalizedClass.start_time,
         end_time: normalizedClass.end_time,
         class_name: normalizedClass.class_name,
-        class_type: normalizedClass.class_type
+        class_type: normalizedClass.class_type,
+        location: normalizedClass.location,
+        lecturer: normalizedClass.lecturer
       })
       .eq('id', classId)
       .eq('user_id', req.user.id)

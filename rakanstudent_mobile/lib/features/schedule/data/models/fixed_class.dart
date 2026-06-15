@@ -6,6 +6,8 @@ class FixedClass {
     required this.endTime,
     required this.className,
     this.classType,
+    this.location,
+    this.lecturer,
   });
 
   final String id;
@@ -14,6 +16,8 @@ class FixedClass {
   final String endTime;
   final String className;
   final String? classType;
+  final String? location;
+  final String? lecturer;
 
   factory FixedClass.fromJson(Map<String, dynamic> json) {
     return FixedClass(
@@ -23,6 +27,8 @@ class FixedClass {
       endTime: (json['end_time'] ?? '').toString(),
       className: (json['class_name'] ?? 'Untitled class').toString(),
       classType: _asNullableString(json['class_type']),
+      location: _asNullableString(json['location']),
+      lecturer: _asNullableString(json['lecturer']),
     );
   }
 

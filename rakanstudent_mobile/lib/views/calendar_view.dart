@@ -438,6 +438,26 @@ class _CalendarViewState extends State<CalendarView> {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
+                if (classSchedule.location != null &&
+                    classSchedule.location!.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    '\u{1F4CD} ${classSchedule.location}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: subTextColor,
+                    ),
+                  ),
+                ],
+                if (classSchedule.lecturer != null &&
+                    classSchedule.lecturer!.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    '\u{1F464} ${classSchedule.lecturer}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: subTextColor,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

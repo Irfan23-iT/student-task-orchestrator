@@ -370,9 +370,7 @@ class _VoiceCaptureWidgetState extends State<VoiceCaptureWidget>
         // Ignore: submission can continue with the captured transcript.
       }
       await _stopSpeaking();
-      final response = await _apiService.sendChatMessage(
-        'Create a task from this voice note. Infer the concise task title, due date or reminder time if mentioned, and priority if obvious. Voice note: "$finalText"',
-      );
+      final response = await _apiService.sendVoiceTask(finalText);
       if (!mounted) {
         return;
       }

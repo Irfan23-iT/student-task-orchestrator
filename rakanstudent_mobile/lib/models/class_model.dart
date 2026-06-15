@@ -6,6 +6,8 @@ class ClassModel {
     required this.endTime,
     required this.className,
     required this.classType,
+    this.location,
+    this.lecturer,
   });
 
   final String? id;
@@ -14,6 +16,8 @@ class ClassModel {
   final String endTime;
   final String className;
   final String classType;
+  final String? location;
+  final String? lecturer;
 
   factory ClassModel.fromJson(Map<String, dynamic> json) {
     return ClassModel(
@@ -23,6 +27,8 @@ class ClassModel {
       endTime: (json['end_time'] ?? json['endTime'] ?? '').toString(),
       className: (json['class_name'] ?? json['className'] ?? '').toString(),
       classType: (json['class_type'] ?? json['classType'] ?? '').toString(),
+      location: _asNullableString(json['location']),
+      lecturer: _asNullableString(json['lecturer']),
     );
   }
 
@@ -34,7 +40,15 @@ class ClassModel {
       'end_time': endTime,
       'class_name': className,
       'class_type': classType,
+      if (location != null && location!.isNotEmpty) 'location': location,
+      if (lecturer != null && lecturer!.isNotEmpty) 'lecturer': lecturer,
     };
+  }
+
+  static String? _asNullableString(Object? value) {
+    if (value == null) return null;
+    final s = value.toString().trim();
+    return s.isEmpty ? null : s;
   }
 
   static int _asDayOfWeek(Object? value) {

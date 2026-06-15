@@ -1419,6 +1419,87 @@ class ApiService {
     );
   }
 
+  Future<AiChatResponse> sendVoiceTask(String voiceText) async {
+    final trimmedText = voiceText.trim();
+    if (trimmedText.isEmpty) {
+      throw ArgumentError('Voice text is required.');
+    }
+
+    final headers = await _getHeaders();
+    final url = '$baseUrl/ai/voice-task';
+    final body = {'text': trimmedText};
+    var response = await _retryRequest(
+      () => http
+          .post(Uri.parse(url), headers: headers, body: jsonEncode(body))
+          .timeout(_longRequestTimeout),
+    );
+
+    if (response.statusCode == 401) {
+      final refreshedToken = await _getValidAccessToken(forceRefresh: true);
+      response = await http
+          .post(
+            Uri.parse(url),
+            headers: {
+              'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true',
+              if (refreshedToken != null)
+                'Authorization': 'Bearer $refreshedToken',
+            },
+            body: jsonEncode(body),
+          )
+          .timeout(_longRequestTimeout);
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      String errorMessage = 'Voice task failed (${response.statusCode})';
+      try {
+        final errorData = jsonDecode(response.body) as Map<String, dynamic>;
+        errorMessage = errorData['details'] ?? errorData['error'] ?? errorMessage;
+      } catch (_) {}
+      throw Exception(errorMessage);
+    }
+
+    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    final aiResponse =
+        (decoded['message'] ?? decoded['response'] ?? '').toString().trim();
+    final actionPerformed = decoded['actionPerformed'] == true;
+    if (actionPerformed) {
+      notifyTaskMutation();
+    }
+
+    return AiChatResponse(
+      message: aiResponse.isNotEmpty ? aiResponse : (actionPerformed ? 'Task created!' : 'Could not create a task from the voice note.'),
+      actionPerformed: actionPerformed,
+      actionType: decoded['actionType']?.toString(),
+    );
+  }
+
+  Future<Map<String, dynamic>> uploadPdfForTasks(List<int> pdfBytes, String filename) async {
+    final headers = await _getHeaders();
+    final url = '$baseUrl/ai/pdf-tasks';
+    final request = http.MultipartRequest('POST', Uri.parse(url));
+    request.headers.addAll(headers);
+    request.files.add(
+      http.MultipartFile.fromBytes('file', pdfBytes, filename: filename),
+    );
+
+    final streamedResponse = await request.send().timeout(
+      const Duration(seconds: 60),
+    );
+    final responseBody = await streamedResponse.stream.bytesToString();
+    final decoded = jsonDecode(responseBody) as Map<String, dynamic>;
+
+    if (streamedResponse.statusCode < 200 || streamedResponse.statusCode >= 300) {
+      throw Exception(decoded['details'] ?? decoded['error'] ?? 'PDF upload failed');
+    }
+
+    if (decoded['actionPerformed'] == true) {
+      notifyTaskMutation();
+    }
+
+    return decoded;
+  }
+
   Future<Map<String, dynamic>> scanImageForTasks({
     required String imageBase64,
     String mimeType = 'image/jpeg',
