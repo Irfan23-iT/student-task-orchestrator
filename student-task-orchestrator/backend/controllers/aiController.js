@@ -782,7 +782,7 @@ export const executeVisionActions = async ({ actions, db, userId }) => {
 
 const generateVisionActionText = async ({ imageBase64, mimeType }) => {
   const ai = getGeminiClient();
-  const model = process.env.GEMINI_VISION_MODEL || 'gemini-2.5-flash';
+  const model = process.env.GEMINI_VISION_MODEL || 'gemini-3.1-flash-preview';
   const response = await ai.models.generateContent({
     model,
     contents: [
@@ -1107,11 +1107,16 @@ export const chatWithAi = async (req, res) => {
       };
     }
 
-    actionTask = await createTaskFromAiAction({
-      action: payload.action,
-      db,
-      userId,
-    });
+    try {
+      actionTask = await createTaskFromAiAction({
+        action: payload.action,
+        db,
+        userId,
+      });
+    } catch (taskError) {
+      console.error('AI Chat task creation failed:', taskError.message || taskError);
+      actionTask = null;
+    }
 
     const { action, ...clientPayload } = payload;
     res.status(200).json({
@@ -1132,7 +1137,7 @@ export const chatWithAi = async (req, res) => {
 
 const generateVisionFlashcardText = async ({ imageBase64, mimeType }) => {
   const ai = getGeminiClient();
-  const model = process.env.GEMINI_VISION_MODEL || 'gemini-2.5-flash';
+  const model = process.env.GEMINI_VISION_MODEL || 'gemini-3.1-flash-preview';
   const response = await ai.models.generateContent({
     model,
     contents: [

@@ -348,7 +348,6 @@ class _ScheduleViewState extends State<ScheduleView> {
     final colorScheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = Theme.of(context).scaffoldBackgroundColor;
-    final textColor = colorScheme.onSurface;
     final subTextColor = colorScheme.onSurfaceVariant;
     final shadow =
         isDark
@@ -363,19 +362,6 @@ class _ScheduleViewState extends State<ScheduleView> {
 
     return Scaffold(
       backgroundColor: bgColor,
-      floatingActionButton: Padding(
-        padding: const EdgeInsets.only(bottom: 80),
-        child: FloatingActionButton(
-          heroTag: 'schedule-add-class-fab',
-          onPressed: _showAddSubjectSheet,
-          backgroundColor: colorScheme.primary,
-          foregroundColor: colorScheme.onPrimary,
-          elevation: 8,
-          shape: const CircleBorder(),
-          child: const Icon(Icons.add, size: 28),
-        ),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       body: SafeArea(
         bottom: false,
         child: RefreshIndicator(
@@ -393,50 +379,81 @@ class _ScheduleViewState extends State<ScheduleView> {
                     colors: [colorScheme.primary, colorScheme.secondary],
                   ),
                   borderRadius: BorderRadius.circular(34),
-                  border: Border.all(
-                    color: colorScheme.outline,
-                  ),
+                  border: Border.all(color: colorScheme.outline),
                   boxShadow: shadow,
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Schedule',
-                            style: Theme.of(
-                              context,
-                            ).textTheme.headlineMedium?.copyWith(
-                              color: textColor,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: -0.8,
-                            ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Schedule',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .headlineMedium
+                                    ?.copyWith(
+                                      color: colorScheme.onPrimary,
+                                      fontWeight: FontWeight.w900,
+                                      letterSpacing: -0.8,
+                                    ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                'Your fixed weekly classes',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.copyWith(
+                                      color: colorScheme.onPrimary.withValues(
+                                        alpha: 0.78,
+                                      ),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Your fixed weekly classes',
-                            style: Theme.of(
-                              context,
-                            ).textTheme.bodyMedium?.copyWith(
-                              color: subTextColor,
-                              fontWeight: FontWeight.w600,
+                        ),
+                        Container(
+                          width: 58,
+                          height: 58,
+                          decoration: BoxDecoration(
+                            color: colorScheme.onPrimary.withValues(
+                              alpha: 0.12,
                             ),
+                            borderRadius: BorderRadius.circular(22),
                           ),
-                        ],
-                      ),
+                          child: Icon(
+                            Icons.calendar_month_rounded,
+                            color: colorScheme.onPrimary,
+                            size: 30,
+                          ),
+                        ),
+                      ],
                     ),
-                    Container(
-                      width: 58,
-                      height: 58,
-                      decoration: BoxDecoration(
-                        color: colorScheme.primary.withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(22),
-                      ),
-                      child: Icon(
-                        Icons.calendar_month_rounded,
-                        color: colorScheme.primary,
+                    const SizedBox(height: 22),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: _showAddSubjectSheet,
+                        icon: const Icon(Icons.add_rounded),
+                        label: const Text('Add Class'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: colorScheme.onPrimary,
+                          foregroundColor: colorScheme.primary,
+                          padding: const EdgeInsets.symmetric(vertical: 15),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          textStyle: const TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 15,
+                          ),
+                        ),
                       ),
                     ),
                   ],
@@ -454,9 +471,10 @@ class _ScheduleViewState extends State<ScheduleView> {
                   child: Text(
                     'No fixed classes yet.',
                     textAlign: TextAlign.center,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodyMedium?.copyWith(color: subTextColor),
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyMedium
+                        ?.copyWith(color: subTextColor),
                   ),
                 )
               else
@@ -488,15 +506,11 @@ class AddSubjectSheet extends StatefulWidget {
 class _AddSubjectSheetState extends State<AddSubjectSheet> {
   final ApiService _apiService = ApiService();
   final TextEditingController _subjectController = TextEditingController();
-  final TextEditingController _timeController = TextEditingController();
-  final TextEditingController _lecturerController = TextEditingController();
-  final TextEditingController _locationController = TextEditingController();
-  final TextEditingController _subjectNameController = TextEditingController();
   final TextEditingController _classTypeController = TextEditingController(
     text: 'Lecture',
   );
-  final TextEditingController _lecturerNameController = TextEditingController();
-  final TextEditingController _roomLocationController = TextEditingController();
+  final TextEditingController _lecturerController = TextEditingController();
+  final TextEditingController _locationController = TextEditingController();
   final TextEditingController _startTimeController = TextEditingController();
   final TextEditingController _endTimeController = TextEditingController();
 
@@ -505,12 +519,6 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
   bool _isSaving = false;
   int _setupModeIndex = 0;
   PlatformFile? _selectedFile;
-
-  static const Color _sheetBackground = Color(0xFF000000);
-  static const Color _cardBackground = Color(0xFF1A1A24);
-  static const Color _textSecondary = Color(0xFF888888);
-  static const Color _neonGreen = Color(0xFF00FFB2);
-  static const Color _brightBlue = Color(0xFF00AAFF);
 
   static const Map<int, String> _dayLabels = <int, String>{
     1: 'Monday',
@@ -525,13 +533,9 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
   @override
   void dispose() {
     _subjectController.dispose();
-    _timeController.dispose();
+    _classTypeController.dispose();
     _lecturerController.dispose();
     _locationController.dispose();
-    _subjectNameController.dispose();
-    _classTypeController.dispose();
-    _lecturerNameController.dispose();
-    _roomLocationController.dispose();
     _startTimeController.dispose();
     _endTimeController.dispose();
     super.dispose();
@@ -546,22 +550,14 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
   int _dayStringToValue(Object? value) {
     final normalized = (value ?? '').toString().trim().toLowerCase();
     const days = <String, int>{
-      'monday': 1,
-      'mon': 1,
-      'tuesday': 2,
-      'tue': 2,
-      'wednesday': 3,
-      'wed': 3,
-      'thursday': 4,
-      'thu': 4,
-      'friday': 5,
-      'fri': 5,
-      'saturday': 6,
-      'sat': 6,
-      'sunday': 7,
-      'sun': 7,
+      'monday': 1, 'mon': 1,
+      'tuesday': 2, 'tue': 2,
+      'wednesday': 3, 'wed': 3,
+      'thursday': 4, 'thu': 4,
+      'friday': 5, 'fri': 5,
+      'saturday': 6, 'sat': 6,
+      'sunday': 7, 'sun': 7,
     };
-
     return days[normalized] ?? int.tryParse(normalized) ?? 1;
   }
 
@@ -588,47 +584,37 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
   String _extractStartTime(Object? value) {
     final time = (value ?? '').toString().trim();
     final tokens = _extractTimeTokens(time);
-    final minutes =
-        tokens.isNotEmpty ? _parseTimeToMinutes(tokens.first) : null;
+    final minutes = tokens.isNotEmpty ? _parseTimeToMinutes(tokens.first) : null;
     return _formatMinutesAsBackendTime(minutes ?? 8 * 60);
   }
 
   String _extractEndTime(Object? value) {
     final time = (value ?? '').toString().trim();
     final tokens = _extractTimeTokens(time);
-    final startMinutes =
-        tokens.isNotEmpty ? _parseTimeToMinutes(tokens.first) : null;
-    final endMinutes =
-        tokens.length > 1 ? _parseTimeToMinutes(tokens.last) : null;
+    final startMinutes = tokens.isNotEmpty ? _parseTimeToMinutes(tokens.first) : null;
+    final endMinutes = tokens.length > 1 ? _parseTimeToMinutes(tokens.last) : null;
     final safeStartMinutes = startMinutes ?? 8 * 60;
-    final safeEndMinutes =
-        endMinutes != null && endMinutes > safeStartMinutes
-            ? endMinutes
-            : safeStartMinutes + 60;
-
+    final safeEndMinutes = endMinutes != null && endMinutes > safeStartMinutes
+        ? endMinutes
+        : safeStartMinutes + 60;
     return _formatMinutesAsBackendTime(safeEndMinutes);
   }
 
   List<String> _extractTimeTokens(String value) {
-    return RegExp(
-      r'\d{1,2}[:.]\d{2}(?::\d{2})?\s*(?:AM|PM|am|pm)?',
-    ).allMatches(value).map((match) => match.group(0)!.trim()).toList();
+    return RegExp(r'\d{1,2}[:.]\d{2}(?::\d{2})?\s*(?:AM|PM|am|pm)?')
+        .allMatches(value)
+        .map((match) => match.group(0)!.trim())
+        .toList();
   }
 
   int? _parseTimeToMinutes(Object? value) {
     final raw = (value ?? '').toString().trim();
-    final match = RegExp(
-      r'^(\d{1,2})[:.](\d{2})(?::\d{2})?\s*(AM|PM|am|pm)?',
-    ).matchAsPrefix(raw);
-    if (match == null) {
-      return null;
-    }
+    final match = RegExp(r'^(\d{1,2})[:.](\d{2})(?::\d{2})?\s*(AM|PM|am|pm)?').matchAsPrefix(raw);
+    if (match == null) return null;
 
     var hour = int.tryParse(match.group(1) ?? '');
     final minute = int.tryParse(match.group(2) ?? '');
-    if (hour == null || minute == null || minute < 0 || minute > 59) {
-      return null;
-    }
+    if (hour == null || minute == null || minute < 0 || minute > 59) return null;
 
     final meridiem = match.group(3)?.toUpperCase();
     if (meridiem == 'PM' && hour < 12) {
@@ -636,11 +622,7 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
     } else if (meridiem == 'AM' && hour == 12) {
       hour = 0;
     }
-
-    if (hour < 0 || hour > 23) {
-      return null;
-    }
-
+    if (hour < 0 || hour > 23) return null;
     return hour * 60 + minute;
   }
 
@@ -648,11 +630,10 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
     final normalized = totalMinutes % (24 * 60);
     final hour = normalized ~/ 60;
     final minute = normalized % 60;
-    return '${hour.toString().padLeft(2, '0')}:'
-        '${minute.toString().padLeft(2, '0')}:00';
+    return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}:00';
   }
 
-  InputDecoration _darkFieldDecoration({
+  InputDecoration _fieldDecoration({
     required String labelText,
     String? hintText,
     Widget? suffixIcon,
@@ -661,41 +642,31 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
       labelText: labelText,
       hintText: hintText,
       suffixIcon: suffixIcon,
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
       filled: true,
-      fillColor: _cardBackground,
-      labelStyle: const TextStyle(color: _textSecondary),
-      hintStyle: const TextStyle(color: _textSecondary),
-      suffixIconColor: _textSecondary,
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(18),
-        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(18),
-        borderSide: const BorderSide(color: _brightBlue, width: 1.4),
-      ),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(18)),
     );
   }
 
   Widget _buildModeToggle() {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: _cardBackground,
+        color: colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Row(
         children: [
-          _buildModeTab(index: 0, label: 'AI Auto-Scan ✨'),
-          _buildModeTab(index: 1, label: 'Manual Entry 📝'),
+          _buildModeTab(index: 0, label: 'AI Auto-Scan'),
+          _buildModeTab(index: 1, label: 'Manual Entry'),
         ],
       ),
     );
   }
 
   Widget _buildModeTab({required int index, required String label}) {
+    final colorScheme = Theme.of(context).colorScheme;
     final isSelected = _setupModeIndex == index;
 
     return Expanded(
@@ -708,10 +679,7 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
           alignment: Alignment.center,
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
-            gradient:
-                isSelected
-                    ? const LinearGradient(colors: [_neonGreen, _brightBlue])
-                    : null,
+            color: isSelected ? colorScheme.primary : Colors.transparent,
             borderRadius: BorderRadius.circular(999),
           ),
           child: Text(
@@ -719,7 +687,7 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: isSelected ? Colors.black : Colors.white,
+              color: isSelected ? colorScheme.onPrimary : colorScheme.onSurface,
               fontWeight: FontWeight.w800,
               fontSize: 13,
             ),
@@ -730,103 +698,92 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
   }
 
   Widget _buildAutoScanPanel() {
+    final colorScheme = Theme.of(context).colorScheme;
     final selectedFile = _selectedFile;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
+        Text(
           'Automated Timetable Setup',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 22,
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
             fontWeight: FontWeight.w800,
           ),
         ),
         const SizedBox(height: 8),
-        const Text(
-          "Upload your official university timetable file or screenshot. RakanStudent's AI will automatically map your entire semester.",
-          style: TextStyle(
-            color: _textSecondary,
-            fontSize: 14,
+        Text(
+          "Upload your official university timetable file. RakanStudent's AI will automatically map your entire semester.",
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: colorScheme.onSurfaceVariant,
             height: 1.4,
-            fontWeight: FontWeight.w500,
           ),
         ),
         const SizedBox(height: 18),
         GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: _pickTimetableFile,
-          child: CustomPaint(
-            painter: _DashedBorderPainter(
-              color: _neonGreen.withValues(alpha: 0.65),
-              radius: 26,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 38),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(26),
+              border: Border.all(
+                color: selectedFile != null
+                    ? colorScheme.primary
+                    : colorScheme.outline.withValues(alpha: 0.3),
+                width: selectedFile != null ? 2 : 1,
+              ),
             ),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 38),
-              decoration: BoxDecoration(
-                color: _cardBackground,
-                borderRadius: BorderRadius.circular(26),
-              ),
-              child: Column(
-                children: [
-                  Icon(
-                    selectedFile == null
-                        ? Icons.upload_file_rounded
-                        : Icons.description_rounded,
-                    color: _neonGreen,
-                    size: 52,
+            child: Column(
+              children: [
+                Icon(
+                  selectedFile == null
+                      ? Icons.upload_file_rounded
+                      : Icons.description_rounded,
+                  color: selectedFile != null
+                      ? colorScheme.primary
+                      : colorScheme.onSurfaceVariant,
+                  size: 52,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  selectedFile?.name ?? 'Select Timetable PDF',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
                   ),
-                  const SizedBox(height: 16),
-                  Text(
-                    selectedFile?.name ?? 'Select Timetable PDF or Image',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w800,
-                    ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  selectedFile == null
+                      ? '(UniKL portal exports supported)'
+                      : '${selectedFile.size} bytes selected',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    selectedFile == null
-                        ? '(UniKL portal exports or screenshots supported)'
-                        : '${selectedFile.size} bytes selected',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: _textSecondary,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
         const SizedBox(height: 20),
-        Container(
+        SizedBox(
           width: double.infinity,
           height: 54,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(colors: [_neonGreen, _brightBlue]),
-            borderRadius: BorderRadius.circular(999),
-          ),
           child: FilledButton(
+            onPressed: _isLoading ? null : _analyzeAndSyncSemester,
             style: FilledButton.styleFrom(
-              backgroundColor: Colors.transparent,
-              shadowColor: Colors.transparent,
-              foregroundColor: Colors.black,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(999),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              textStyle: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
               ),
             ),
-            onPressed: _isLoading ? null : _analyzeAndSyncSemester,
-            child: const Text(
-              'Analyze and Sync Semester',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
-            ),
+            child: const Text('Analyze and Sync Semester'),
           ),
         ),
       ],
@@ -837,42 +794,38 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
+        Text(
           'Manual Entry',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 22,
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
             fontWeight: FontWeight.w800,
           ),
         ),
         const SizedBox(height: 8),
-        const Text(
+        Text(
           'Add a fixed weekly class manually when AI ingestion is not available.',
-          style: TextStyle(color: _textSecondary, fontSize: 14, height: 1.4),
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            height: 1.4,
+          ),
         ),
         const SizedBox(height: 18),
         TextField(
           controller: _subjectController,
           autofocus: true,
-          style: const TextStyle(color: Colors.white),
-          decoration: _darkFieldDecoration(
+          decoration: _fieldDecoration(
             labelText: 'Class/Subject Name',
             hintText: 'Calculus',
           ),
         ),
         const SizedBox(height: 12),
         DropdownButtonFormField<int>(
-          initialValue: _dayValue,
-          dropdownColor: _cardBackground,
-          style: const TextStyle(color: Colors.white),
-          decoration: _darkFieldDecoration(labelText: 'Time/Day Selection'),
+          value: _dayValue,
+          decoration: _fieldDecoration(labelText: 'Day of Week'),
           items: _dayLabels.entries
-              .map(
-                (entry) => DropdownMenuItem<int>(
-                  value: entry.key,
-                  child: Text(entry.value),
-                ),
-              )
+              .map((entry) => DropdownMenuItem<int>(
+                    value: entry.key,
+                    child: Text(entry.value),
+                  ))
               .toList(growable: false),
           onChanged: (value) {
             setState(() {
@@ -883,8 +836,7 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
         const SizedBox(height: 12),
         TextField(
           controller: _classTypeController,
-          style: const TextStyle(color: Colors.white),
-          decoration: _darkFieldDecoration(
+          decoration: _fieldDecoration(
             labelText: 'Class Type',
             hintText: 'Lecture',
           ),
@@ -892,8 +844,7 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
         const SizedBox(height: 12),
         TextField(
           controller: _lecturerController,
-          style: const TextStyle(color: Colors.white),
-          decoration: _darkFieldDecoration(
+          decoration: _fieldDecoration(
             labelText: 'Lecturer Name',
             hintText: 'Dr. Name',
           ),
@@ -901,8 +852,7 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
         const SizedBox(height: 12),
         TextField(
           controller: _locationController,
-          style: const TextStyle(color: Colors.white),
-          decoration: _darkFieldDecoration(
+          decoration: _fieldDecoration(
             labelText: 'Room/Location',
             hintText: 'Room A-01',
           ),
@@ -911,9 +861,8 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
         TextField(
           controller: _startTimeController,
           readOnly: true,
-          style: const TextStyle(color: Colors.white),
           onTap: () => _pickTime(_startTimeController),
-          decoration: _darkFieldDecoration(
+          decoration: _fieldDecoration(
             labelText: 'Start Time',
             hintText: 'Select start time',
             suffixIcon: const Icon(Icons.schedule_rounded),
@@ -923,34 +872,37 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
         TextField(
           controller: _endTimeController,
           readOnly: true,
-          style: const TextStyle(color: Colors.white),
           onTap: () => _pickTime(_endTimeController),
-          decoration: _darkFieldDecoration(
+          decoration: _fieldDecoration(
             labelText: 'End Time',
             hintText: 'Select end time',
             suffixIcon: const Icon(Icons.schedule_rounded),
           ),
         ),
         const SizedBox(height: 18),
-        FilledButton.icon(
-          style: FilledButton.styleFrom(
-            backgroundColor: _brightBlue,
-            foregroundColor: Colors.white,
-            minimumSize: const Size.fromHeight(54),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(999),
-            ),
-          ),
-          onPressed: _isSaving ? null : _saveManualClass,
-          icon:
-              _isSaving
-                  ? const SizedBox(
+        SizedBox(
+          width: double.infinity,
+          height: 54,
+          child: FilledButton.icon(
+            onPressed: _isSaving ? null : _saveManualClass,
+            icon: _isSaving
+                ? const SizedBox(
                     width: 18,
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                  : const Icon(Icons.save_alt_rounded),
-          label: Text(_isSaving ? 'Saving...' : 'Save Class Manually'),
+                : const Icon(Icons.save_alt_rounded),
+            label: Text(_isSaving ? 'Saving...' : 'Save Class Manually'),
+            style: FilledButton.styleFrom(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
+              textStyle: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
         ),
       ],
     );
@@ -958,40 +910,25 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
 
   TimeOfDay? _parseControllerTime(TextEditingController controller) {
     final parts = controller.text.trim().split(':');
-    if (parts.length < 2) {
-      return null;
-    }
-
+    if (parts.length < 2) return null;
     final hour = int.tryParse(parts[0]);
     final minute = int.tryParse(parts[1]);
-    if (hour == null ||
-        minute == null ||
-        hour < 0 ||
-        hour > 23 ||
-        minute < 0 ||
-        minute > 59) {
+    if (hour == null || minute == null || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
       return null;
     }
-
     return TimeOfDay(hour: hour, minute: minute);
   }
 
   Future<void> _pickTime(TextEditingController controller) async {
     FocusScope.of(context).unfocus();
-
     final selectedTime = await showTimePicker(
       context: context,
       initialTime: _parseControllerTime(controller) ?? TimeOfDay.now(),
     );
-
-    if (!mounted || selectedTime == null) {
-      return;
-    }
-
+    if (!mounted || selectedTime == null) return;
     final formattedTime =
         '${selectedTime.hour.toString().padLeft(2, '0')}:'
         '${selectedTime.minute.toString().padLeft(2, '0')}:00';
-
     setState(() {
       controller.text = formattedTime;
     });
@@ -999,27 +936,17 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
 
   Future<void> _pickTimetableFile() async {
     try {
-      print(
-        '📡 Initiating document picker for automated schedule extraction...',
-      );
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: const ['pdf'],
         withData: true,
       );
-
-      if (!mounted || result == null || result.files.isEmpty) {
-        return;
-      }
-
+      if (!mounted || result == null || result.files.isEmpty) return;
       setState(() {
         _selectedFile = result.files.single;
       });
     } catch (error) {
-      if (!mounted) {
-        return;
-      }
-
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Unable to select timetable file: $error')),
       );
@@ -1029,7 +956,6 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
   Future<void> _analyzeAndSyncSemester() async {
     final messenger = ScaffoldMessenger.of(context);
     final selectedFile = _selectedFile;
-
     if (selectedFile == null) {
       messenger.showSnackBar(
         const SnackBar(content: Text('Please select a timetable file first.')),
@@ -1050,129 +976,90 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
 
       if (selectedFile.bytes != null) {
         request.files.add(
-          http.MultipartFile.fromBytes(
-            'file',
-            selectedFile.bytes!,
-            filename: selectedFile.name,
-          ),
+          http.MultipartFile.fromBytes('file', selectedFile.bytes!, filename: selectedFile.name),
         );
       } else if (selectedFile.path != null) {
         request.files.add(
-          await http.MultipartFile.fromPath(
-            'file',
-            selectedFile.path!,
-            filename: selectedFile.name,
-          ),
+          await http.MultipartFile.fromPath('file', selectedFile.path!, filename: selectedFile.name),
         );
       } else {
         throw StateError('Selected file has no readable bytes or path.');
       }
 
-      var streamedResponse = await request.send();
-      var responseBody = await streamedResponse.stream.bytesToString();
+      final streamedResponse = await request.send();
+      final responseBody = await streamedResponse.stream.bytesToString();
 
       if (streamedResponse.statusCode == 200) {
-        // 1. Raw, safe JSON decoding
         final Map<String, dynamic> responseData = jsonDecode(responseBody);
         final List<dynamic> extractedClasses = responseData['data'] ?? [];
 
         if (extractedClasses.isEmpty) {
           if (mounted) {
             setState(() => _isLoading = false);
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('⚠️ No classes found in response.')),
-            );
           }
+          messenger.showSnackBar(
+            const SnackBar(content: Text('No classes found in the timetable.')),
+          );
           return;
         }
 
-        // 2. Data Injection
         final existingClasses = await _apiService.fetchFixedClasses();
-        final seenSubjectCodes = <String>{
-          for (final classItem in existingClasses)
-            _subjectCode(classItem.className),
-        };
-        final uniqueExtractedClasses = <String, Map<String, dynamic>>{};
+        final existingKeys = existingClasses
+            .map((c) => '${c.dayOfWeek}-${c.startTime}-${c.className}')
+            .toSet();
 
-        for (final classItem in extractedClasses.whereType<Map>()) {
-          final normalizedItem = Map<String, dynamic>.from(classItem);
-          final code = _subjectCode(normalizedItem['subject']);
-          if (code.isEmpty || code == 'TBA') {
-            continue;
-          }
-          uniqueExtractedClasses.putIfAbsent(code, () {
-            normalizedItem['subject'] = code;
-            normalizedItem['lecturer'] = _lecturerName(
-              normalizedItem['lecturer'],
-            );
-            return normalizedItem;
-          });
-        }
+        int addedCount = 0;
+        for (final extracted in extractedClasses) {
+          final subject = _subjectCode(extracted['subject'] ?? extracted['class_name']);
+          final day = _dayStringToValue(extracted['day'] ?? extracted['day_of_week']);
+          final startTime = _extractStartTime(extracted['time'] ?? extracted['start_time']);
+          final endTime = _extractEndTime(extracted['time'] ?? extracted['end_time']);
+          final classType = (extracted['class_type'] ?? 'Lect').toString().trim();
 
-        var savedCount = 0;
-        var skippedCount = 0;
-        for (var classItem in uniqueExtractedClasses.values) {
-          final subjectCode = _subjectCode(classItem['subject']);
-          if (seenSubjectCodes.contains(subjectCode)) {
-            skippedCount++;
-            print('⏭️ Skipped existing class: $subjectCode');
-            continue;
-          }
+          final key = '$day-$startTime-$subject';
+          if (existingKeys.contains(key)) continue;
 
-          final parsedClass = ClassModel(
-            id: null,
-            dayOfWeek: _dayStringToValue(classItem['day']),
-            startTime: _extractStartTime(classItem['time']),
-            endTime: _extractEndTime(classItem['time']),
-            className: subjectCode,
-            classType:
-                'Location: ${(classItem['location'] ?? 'TBA')} | Lecturer: ${_lecturerName(classItem['lecturer'])}',
-          );
           try {
-            await _apiService.saveFixedClass(parsedClass);
-            seenSubjectCodes.add(subjectCode);
-            savedCount++;
-            print('📥 Successfully parsed class: $subjectCode');
+            await _apiService.saveFixedClass(
+              ClassModel(
+                id: '',
+                dayOfWeek: day,
+                startTime: startTime,
+                endTime: endTime,
+                className: subject,
+                classType: classType,
+              ),
+            );
+            addedCount++;
           } catch (error) {
-            if (_isConflictError(error)) {
-              skippedCount++;
-              print('⏭️ Skipped conflicting class: $subjectCode');
-              continue;
-            }
+            if (_isConflictError(error)) continue;
             rethrow;
           }
         }
 
-        if (savedCount == 0 && skippedCount > 0) {
-          throw StateError(
-            'All parsed classes already exist or conflict with your current schedule.',
-          );
-        }
-
-        // 3. Clean Navigation & UI Update
         if (mounted) {
           setState(() => _isLoading = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('✨ Timetable synced successfully!')),
-          );
-          ApiService.notifyScheduleMutation();
+        }
+        messenger.showSnackBar(
+          SnackBar(content: Text('Synced $addedCount new class(es) from timetable.')),
+        );
+        if (Navigator.of(context).mounted) {
           Navigator.of(context).pop(true);
         }
       } else {
-        throw Exception(
-          'Server returned ${streamedResponse.statusCode}: $responseBody',
-        );
+        String errorMessage = 'Failed to parse timetable (${streamedResponse.statusCode})';
+        try {
+          final errorData = jsonDecode(responseBody) as Map<String, dynamic>;
+          errorMessage = errorData['details'] ?? errorData['error'] ?? errorMessage;
+        } catch (_) {}
+        throw Exception(errorMessage);
       }
     } catch (error) {
-      if (!mounted) {
-        return;
+      if (mounted) {
+        setState(() => _isLoading = false);
       }
-
-      setState(() {
-        _isLoading = false;
-      });
       messenger.showSnackBar(
-        SnackBar(content: Text('Unable to parse timetable: $error')),
+        SnackBar(content: Text('Timetable error: ${error.toString().replaceAll('Exception: ', '')}')),
       );
     }
   }
@@ -1180,25 +1067,10 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
   Future<void> _saveManualClass() async {
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
-
-    FocusScope.of(context).unfocus();
     final subject = _subjectController.text.trim();
-    final classType = _classTypeController.text.trim();
-    final lecturer = _lecturerController.text.trim();
-    final location = _locationController.text.trim();
-    final startTime = _startTimeController.text.trim();
-    final endTime = _endTimeController.text.trim();
-    final time = '$startTime-$endTime';
-    _timeController.text = time;
-
-    if (subject.isEmpty ||
-        classType.isEmpty ||
-        lecturer.isEmpty ||
-        location.isEmpty ||
-        startTime.isEmpty ||
-        endTime.isEmpty) {
+    if (subject.isEmpty) {
       messenger.showSnackBar(
-        const SnackBar(content: Text('Please fill out all fields')),
+        const SnackBar(content: Text('Class name is required.')),
       );
       return;
     }
@@ -1208,40 +1080,34 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
     });
 
     try {
-      final payload = <String, Object>{
-        'subject': subject,
-        'classType': classType,
-        'dayOfWeek': _dayValue,
-        'time': time,
-        'startTime': startTime,
-        'endTime': endTime,
-        'lecturer': lecturer,
-        'location': location,
-      };
-      print('📝 Manual timetable payload: $payload');
-      // TODO: ref.read(supabaseScheduleProvider.notifier).addClass(payload);
+      final classModel = ClassModel(
+        id: '',
+        dayOfWeek: _dayValue,
+        startTime: _startTimeController.text.isNotEmpty
+            ? _startTimeController.text
+            : '08:00:00',
+        endTime: _endTimeController.text.isNotEmpty
+            ? _endTimeController.text
+            : '09:00:00',
+        className: subject,
+        classType: _classTypeController.text.trim().isNotEmpty
+            ? _classTypeController.text.trim()
+            : 'Lecture',
+      );
 
-      if (!mounted) {
-        return;
-      }
-
+      await _apiService.saveFixedClass(classModel);
+      if (!mounted) return;
       setState(() {
         _isSaving = false;
       });
       messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Class saved manually!'),
-          backgroundColor: _neonGreen,
-        ),
+        const SnackBar(content: Text('Class saved manually!')),
       );
       if (navigator.mounted) {
         navigator.pop(true);
       }
     } catch (error) {
-      if (!mounted) {
-        return;
-      }
-
+      if (!mounted) return;
       setState(() {
         _isSaving = false;
       });
@@ -1253,6 +1119,7 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     final viewInsets = MediaQuery.of(context).viewInsets;
 
     return SafeArea(
@@ -1260,48 +1127,40 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
         children: [
           Padding(
             padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + viewInsets.bottom),
-            child: DecoratedBox(
-              decoration: const BoxDecoration(color: _sheetBackground),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Text(
-                      'Timetable Setup',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 26,
-                        fontWeight: FontWeight.w900,
-                      ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Timetable Setup',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w900,
                     ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'Choose AI ingestion or enter your fixed weekly class manually.',
-                      style: TextStyle(
-                        color: _textSecondary,
-                        fontSize: 14,
-                        height: 1.35,
-                        fontWeight: FontWeight.w500,
-                      ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Choose AI ingestion or enter your fixed weekly class manually.',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                      height: 1.35,
                     ),
-                    const SizedBox(height: 18),
-                    _buildModeToggle(),
-                    const SizedBox(height: 22),
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 260),
-                      switchInCurve: Curves.easeOut,
-                      switchOutCurve: Curves.easeIn,
-                      child: KeyedSubtree(
-                        key: ValueKey<int>(_setupModeIndex),
-                        child:
-                            _setupModeIndex == 0
-                                ? _buildAutoScanPanel()
-                                : _buildManualEntryForm(),
-                      ),
+                  ),
+                  const SizedBox(height: 18),
+                  _buildModeToggle(),
+                  const SizedBox(height: 22),
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 260),
+                    switchInCurve: Curves.easeOut,
+                    switchOutCurve: Curves.easeIn,
+                    child: KeyedSubtree(
+                      key: ValueKey<int>(_setupModeIndex),
+                      child: _setupModeIndex == 0
+                          ? _buildAutoScanPanel()
+                          : _buildManualEntryForm(),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -1309,18 +1168,17 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
             Positioned.fill(
               child: Container(
                 color: Colors.black.withValues(alpha: 0.72),
-                child: const Center(
+                child: Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      CircularProgressIndicator(color: _neonGreen),
-                      SizedBox(height: 18),
+                      CircularProgressIndicator(color: colorScheme.primary),
+                      const SizedBox(height: 18),
                       Text(
-                        'LangGraph engine analyzing scheduling layout...',
+                        'Analyzing timetable layout...',
                         textAlign: TextAlign.center,
-                        style: TextStyle(
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           color: Colors.white,
-                          fontSize: 15,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -1332,40 +1190,5 @@ class _AddSubjectSheetState extends State<AddSubjectSheet> {
         ],
       ),
     );
-  }
-}
-
-class _DashedBorderPainter extends CustomPainter {
-  const _DashedBorderPainter({required this.color, required this.radius});
-
-  final Color color;
-  final double radius;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint =
-        Paint()
-          ..color = color
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.6;
-    final rect = Offset.zero & size;
-    final rrect = RRect.fromRectAndRadius(rect, Radius.circular(radius));
-    final path = Path()..addRRect(rrect);
-
-    for (final metric in path.computeMetrics()) {
-      var distance = 0.0;
-      const dash = 8.0;
-      const gap = 6.0;
-      while (distance < metric.length) {
-        final next = distance + dash;
-        canvas.drawPath(metric.extractPath(distance, next), paint);
-        distance = next + gap;
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _DashedBorderPainter oldDelegate) {
-    return oldDelegate.color != color || oldDelegate.radius != radius;
   }
 }

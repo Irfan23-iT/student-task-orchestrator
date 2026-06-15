@@ -2,11 +2,13 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
@@ -124,6 +126,48 @@ class FlashcardDto {
       front: (json['front'] ?? '').toString(),
       back: (json['back'] ?? '').toString(),
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {'front': front, 'back': back};
+  }
+}
+
+class FlashcardStorage {
+  static const String _storageKey = 'saved_flashcards';
+  static final ValueNotifier<int> flashcardNotifier = ValueNotifier<int>(0);
+
+  static Future<List<List<FlashcardDto>>> loadAll() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getStringList(_storageKey) ?? [];
+      return raw.map((entry) {
+        final list = jsonDecode(entry) as List<dynamic>;
+        return list
+            .map((e) => FlashcardDto.fromJson(Map<String, dynamic>.from(e)))
+            .toList();
+      }).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static Future<void> save(List<FlashcardDto> flashcards) async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getStringList(_storageKey) ?? [];
+    raw.add(jsonEncode(flashcards.map((f) => f.toJson()).toList()));
+    await prefs.setStringList(_storageKey, raw);
+    flashcardNotifier.value++;
+  }
+
+  static Future<void> deleteAt(int index) async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getStringList(_storageKey) ?? [];
+    if (index >= 0 && index < raw.length) {
+      raw.removeAt(index);
+      await prefs.setStringList(_storageKey, raw);
+      flashcardNotifier.value++;
+    }
   }
 }
 
@@ -462,6 +506,7 @@ class ApiService {
   ApiService._internal({required FlutterSecureStorage storage})
     : _storage = storage {
     debugPrint('Connecting to: $baseUrl');
+    _startKeepAlive();
   }
 
   static const String _jwtTokenKey = 'jwt_token';
@@ -480,6 +525,60 @@ class ApiService {
   static String get baseUrl => EnvConfig.apiBaseUrl;
 
   final FlutterSecureStorage _storage;
+  static Timer? _keepAliveTimer;
+
+  static const Duration _requestTimeout = Duration(seconds: 30);
+  static const Duration _longRequestTimeout = Duration(seconds: 60);
+  static const int _maxRetries = 3;
+  static const Duration _retryDelay = Duration(seconds: 2);
+
+  static void _startKeepAlive() {
+    _keepAliveTimer?.cancel();
+    _keepAliveTimer = Timer.periodic(
+      const Duration(minutes: 8),
+      (_) => _pingKeepAlive(),
+    );
+  }
+
+  static Future<void> _pingKeepAlive() async {
+    try {
+      final url = '$baseUrl/health';
+      await http
+          .get(Uri.parse(url), headers: const {'Content-Type': 'application/json'})
+          .timeout(const Duration(seconds: 10));
+      debugPrint('[KeepAlive] Ping successful');
+    } catch (e) {
+      debugPrint('[KeepAlive] Ping failed: $e');
+    }
+  }
+
+  Future<http.Response> _retryRequest(
+    Future<http.Response> Function() request, {
+    int maxRetries = _maxRetries,
+  }) async {
+    Exception? lastException;
+    for (int attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        final response = await request();
+        return response;
+      } on TimeoutException catch (e) {
+        lastException = e;
+        debugPrint('[Retry] Attempt ${attempt + 1} timed out');
+        if (attempt < maxRetries) {
+          await Future.delayed(_retryDelay * (attempt + 1));
+        }
+      } on SocketException catch (e) {
+        lastException = e;
+        debugPrint('[Retry] Attempt ${attempt + 1} network error');
+        if (attempt < maxRetries) {
+          await Future.delayed(_retryDelay * (attempt + 1));
+        }
+      } catch (e) {
+        rethrow;
+      }
+    }
+    throw lastException ?? TimeoutException('Request failed after retries');
+  }
 
   static void notifyTaskMutation() {
     taskMutationNotifier.value++;
@@ -669,9 +768,11 @@ class ApiService {
 
     final url = '$baseUrl/health';
     _logFetch(url);
-    final response = await http
-        .get(Uri.parse(url), headers: _jsonHeaders())
-        .timeout(const Duration(seconds: 5));
+    final response = await _retryRequest(
+      () => http
+          .get(Uri.parse(url), headers: _jsonHeaders())
+          .timeout(_requestTimeout),
+    );
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception('Health check failed: ${response.statusCode}');
@@ -762,9 +863,11 @@ class ApiService {
     final headers = await _getHeaders();
     final url = '$baseUrl/analytics/overview';
     _logFetch(url);
-    var response = await http
-        .get(Uri.parse(url), headers: headers)
-        .timeout(const Duration(seconds: 15));
+    var response = await _retryRequest(
+      () => http
+          .get(Uri.parse(url), headers: headers)
+          .timeout(_requestTimeout),
+    );
 
     if (response.statusCode == 401) {
       final refreshedToken = await _getValidAccessToken(forceRefresh: true);
@@ -778,7 +881,7 @@ class ApiService {
                 'Authorization': 'Bearer $refreshedToken',
             },
           )
-          .timeout(const Duration(seconds: 15));
+          .timeout(_requestTimeout);
     }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -1266,9 +1369,11 @@ class ApiService {
     final headers = await _getHeaders();
     final url = '$baseUrl/ai/chat';
     final body = {'message': trimmedMessage};
-    var response = await http
-        .post(Uri.parse(url), headers: headers, body: jsonEncode(body))
-        .timeout(const Duration(seconds: 30));
+    var response = await _retryRequest(
+      () => http
+          .post(Uri.parse(url), headers: headers, body: jsonEncode(body))
+          .timeout(_longRequestTimeout),
+    );
 
     if (response.statusCode == 401) {
       final refreshedToken = await _getValidAccessToken(forceRefresh: true);
@@ -1283,13 +1388,16 @@ class ApiService {
             },
             body: jsonEncode(body),
           )
-          .timeout(const Duration(seconds: 30));
+          .timeout(_longRequestTimeout);
     }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(
-        'AI chat failed: ${response.statusCode} ${response.body}',
-      );
+      String errorMessage = 'AI chat failed (${response.statusCode})';
+      try {
+        final errorData = jsonDecode(response.body) as Map<String, dynamic>;
+        errorMessage = errorData['details'] ?? errorData['error'] ?? errorMessage;
+      } catch (_) {}
+      throw Exception(errorMessage);
     }
 
     final decoded = jsonDecode(response.body) as Map<String, dynamic>;
@@ -1759,9 +1867,11 @@ class ApiService {
     }
 
     final headers = await _getHeaders();
-    var response = await http
-        .get(Uri.parse('$baseUrl/calendar/status'), headers: headers)
-        .timeout(const Duration(seconds: 8));
+    var response = await _retryRequest(
+      () => http
+          .get(Uri.parse('$baseUrl/calendar/status'), headers: headers)
+          .timeout(_requestTimeout),
+    );
 
     if (response.statusCode == 401) {
       final refreshedToken = await _getValidAccessToken(forceRefresh: true);
@@ -1775,7 +1885,7 @@ class ApiService {
                 'Authorization': 'Bearer $refreshedToken',
             },
           )
-          .timeout(const Duration(seconds: 8));
+          .timeout(_requestTimeout);
     }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -1794,12 +1904,14 @@ class ApiService {
     final connectHeaders = {...headers, 'ngrok-skip-browser-warning': 'true'};
     debugPrint('[ApiService] POST $baseUrl/calendar/connect-url -> request');
 
-    var response = await http
-        .post(
-          Uri.parse('$baseUrl/calendar/connect-url'),
-          headers: connectHeaders,
-        )
-        .timeout(const Duration(seconds: 8));
+    var response = await _retryRequest(
+      () => http
+          .post(
+            Uri.parse('$baseUrl/calendar/connect-url'),
+            headers: connectHeaders,
+          )
+          .timeout(_requestTimeout),
+    );
 
     if (response.statusCode == 401) {
       final refreshedToken = await _getValidAccessToken(forceRefresh: true);
@@ -1813,7 +1925,7 @@ class ApiService {
                 'Authorization': 'Bearer $refreshedToken',
             },
           )
-          .timeout(const Duration(seconds: 8));
+          .timeout(_requestTimeout);
     }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -1945,9 +2057,11 @@ class ApiService {
     }
 
     final headers = await _getHeaders();
-    var response = await http
-        .get(Uri.parse('$baseUrl/drive/status'), headers: headers)
-        .timeout(const Duration(seconds: 8));
+    var response = await _retryRequest(
+      () => http
+          .get(Uri.parse('$baseUrl/drive/status'), headers: headers)
+          .timeout(_requestTimeout),
+    );
 
     if (response.statusCode == 401) {
       final refreshedToken = await _getValidAccessToken(forceRefresh: true);
@@ -1956,7 +2070,7 @@ class ApiService {
             Uri.parse('$baseUrl/drive/status'),
             headers: _jsonHeaders(token: refreshedToken),
           )
-          .timeout(const Duration(seconds: 8));
+          .timeout(_requestTimeout);
     }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -1969,9 +2083,11 @@ class ApiService {
 
   Future<String> getDriveConnectUrl() async {
     final headers = await _getHeaders();
-    var response = await http
-        .post(Uri.parse('$baseUrl/drive/connect-url'), headers: headers)
-        .timeout(const Duration(seconds: 8));
+    var response = await _retryRequest(
+      () => http
+          .post(Uri.parse('$baseUrl/drive/connect-url'), headers: headers)
+          .timeout(_requestTimeout),
+    );
 
     if (response.statusCode == 401) {
       final refreshedToken = await _getValidAccessToken(forceRefresh: true);
@@ -1980,7 +2096,7 @@ class ApiService {
             Uri.parse('$baseUrl/drive/connect-url'),
             headers: _jsonHeaders(token: refreshedToken),
           )
-          .timeout(const Duration(seconds: 8));
+          .timeout(_requestTimeout);
     }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -2005,15 +2121,17 @@ class ApiService {
       queryParameters: query.trim().isEmpty ? null : {'q': query.trim()},
     );
     final headers = await _getHeaders();
-    var response = await http
-        .get(uri, headers: headers)
-        .timeout(const Duration(seconds: 15));
+    var response = await _retryRequest(
+      () => http
+          .get(uri, headers: headers)
+          .timeout(_longRequestTimeout),
+    );
 
     if (response.statusCode == 401) {
       final refreshedToken = await _getValidAccessToken(forceRefresh: true);
       response = await http
           .get(uri, headers: _jsonHeaders(token: refreshedToken))
-          .timeout(const Duration(seconds: 15));
+          .timeout(_longRequestTimeout);
     }
 
     if (response.statusCode == 400) {

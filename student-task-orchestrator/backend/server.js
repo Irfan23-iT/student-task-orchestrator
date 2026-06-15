@@ -146,8 +146,9 @@ const extractClassesFromText = async (rawText) => {
     rawText
   ].join('\n');
   const modelNames = [
-    process.env.GEMINI_MODEL || 'gemini-3.1-pro-preview',
-    'gemini-3.1-pro-preview'
+    process.env.GEMINI_MODEL || 'gemini-3.1-flash-preview',
+    'gemini-3.1-flash-preview',
+    'gemini-3.1-flash-lite-preview',
   ];
   let lastError;
 

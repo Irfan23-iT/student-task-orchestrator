@@ -4,8 +4,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -36,7 +38,7 @@ class TasksView extends ConsumerStatefulWidget {
   ConsumerState<TasksView> createState() => _TasksViewState();
 }
 
-enum _TaskCreationMode { manual, camera, flashcards, voice }
+enum _TaskCreationMode { manual, camera, flashcards, voice, pdf, reviewFlashcards }
 
 class _TasksViewState extends ConsumerState<TasksView> {
   static const int _maxImageBytes = 1024 * 1024;
@@ -930,6 +932,141 @@ class _TasksViewState extends ConsumerState<TasksView> {
     }
   }
 
+  Future<void> _scanPdfForTasks() async {
+    if (_isScanningTaskImage) {
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
+
+    setState(() {
+      _isScanningTaskImage = true;
+    });
+
+    var dialogOpen = false;
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+        withData: true,
+      );
+
+      if (result == null || result.files.isEmpty) {
+        setState(() {
+          _isScanningTaskImage = false;
+        });
+        return;
+      }
+
+      final file = result.files.single;
+      if (!mounted) return;
+
+      showDialog<void>(
+        context: rootNavigator.context,
+        barrierDismissible: false,
+        builder:
+            (context) => const AlertDialog(
+              content: Row(
+                children: [
+                  SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 3),
+                  ),
+                  SizedBox(width: 18),
+                  Expanded(child: Text('Scanning PDF for tasks...')),
+                ],
+              ),
+            ),
+      );
+      dialogOpen = true;
+
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('${ApiService.baseUrl}/timetable/parse'),
+      );
+      request.headers.addAll(await _apiService.authHeaders());
+
+      if (file.bytes != null) {
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'file',
+            file.bytes!,
+            filename: file.name,
+          ),
+        );
+      } else if (file.path != null) {
+        request.files.add(
+          await http.MultipartFile.fromPath(
+            'file',
+            file.path!,
+            filename: file.name,
+          ),
+        );
+      } else {
+        throw Exception('Could not read the PDF file.');
+      }
+
+      final streamedResponse = await request.send().timeout(
+        const Duration(seconds: 60),
+      );
+      final responseBody = await streamedResponse.stream.bytesToString();
+
+      if (!mounted) return;
+      if (dialogOpen) {
+        rootNavigator.pop();
+        dialogOpen = false;
+      }
+
+      if (streamedResponse.statusCode >= 200 &&
+          streamedResponse.statusCode < 300) {
+        final decoded = jsonDecode(responseBody) as Map<String, dynamic>;
+        final data = decoded['data'] as List<dynamic>? ?? [];
+
+        if (data.isNotEmpty) {
+          ApiService.notifyTaskMutation();
+          await _fetchTasks();
+          if (!mounted) return;
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text(
+                'Imported ${data.length} class${data.length == 1 ? '' : 'es'} from PDF.',
+              ),
+            ),
+          );
+        } else {
+          messenger.showSnackBar(
+            const SnackBar(
+              content: Text('No tasks found in the PDF. Try a different file.'),
+            ),
+          );
+        }
+      } else {
+        String errorMessage = 'PDF scan failed (${streamedResponse.statusCode})';
+        try {
+          final errorData = jsonDecode(responseBody) as Map<String, dynamic>;
+          errorMessage = errorData['details'] ?? errorData['error'] ?? errorMessage;
+        } catch (_) {}
+        throw Exception(errorMessage);
+      }
+    } catch (error) {
+      if (!mounted) return;
+      if (dialogOpen) {
+        rootNavigator.pop();
+      }
+      messenger.showSnackBar(
+        SnackBar(content: Text('PDF error: ${error.toString().replaceAll('Exception: ', '')}')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isScanningTaskImage = false;
+        });
+      }
+    }
+  }
+
   Future<void> _generateFlashcardsFromCamera() async {
     if (_isScanningTaskImage) {
       return;
@@ -1032,6 +1169,26 @@ class _TasksViewState extends ConsumerState<TasksView> {
     return showDialog<void>(
       context: context,
       builder: (context) => _FlashcardsDialog(flashcards: flashcards),
+    );
+  }
+
+  Future<void> _showSavedFlashcardsDialog() async {
+    final savedDecks = await FlashcardStorage.loadAll();
+    if (!mounted) return;
+
+    if (savedDecks.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No saved flashcards yet. Generate some first!'),
+        ),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    showDialog<void>(
+      context: context,
+      builder: (context) => _SavedFlashcardsDialog(decks: savedDecks),
     );
   }
 
@@ -1143,6 +1300,22 @@ class _TasksViewState extends ConsumerState<TasksView> {
                             }
                             : null,
                   ),
+                  _TaskCreationOptionTile(
+                    icon: Icons.picture_as_pdf_rounded,
+                    title: 'Scan PDF',
+                    subtitle: 'Import tasks from a PDF syllabus or assignment.',
+                    onTap: () {
+                      Navigator.of(context).pop(_TaskCreationMode.pdf);
+                    },
+                  ),
+                  _TaskCreationOptionTile(
+                    icon: Icons.style_rounded,
+                    title: 'Review Flashcards',
+                    subtitle: 'Study from your saved flashcard decks.',
+                    onTap: () {
+                      Navigator.of(context).pop(_TaskCreationMode.reviewFlashcards);
+                    },
+                  ),
                 ],
               ),
             ),
@@ -1162,6 +1335,10 @@ class _TasksViewState extends ConsumerState<TasksView> {
         unawaited(_generateFlashcardsFromCamera());
       case _TaskCreationMode.voice:
         unawaited(_openVoiceTaskSheet());
+      case _TaskCreationMode.pdf:
+        unawaited(_scanPdfForTasks());
+      case _TaskCreationMode.reviewFlashcards:
+        unawaited(_showSavedFlashcardsDialog());
     }
   }
 
@@ -1836,6 +2013,134 @@ class _FlashcardsDialogState extends State<_FlashcardsDialog> {
                     tooltip: 'Next card',
                   ),
                 ],
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () async {
+                    await FlashcardStorage.save(widget.flashcards);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Flashcards saved! Find them in Review Flashcards.'),
+                        ),
+                      );
+                      Navigator.of(context).pop();
+                    }
+                  },
+                  icon: const Icon(Icons.save_rounded),
+                  label: const Text('Save Flashcards'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SavedFlashcardsDialog extends StatefulWidget {
+  const _SavedFlashcardsDialog({required this.decks});
+
+  final List<List<FlashcardDto>> decks;
+
+  @override
+  State<_SavedFlashcardsDialog> createState() => _SavedFlashcardsDialogState();
+}
+
+class _SavedFlashcardsDialogState extends State<_SavedFlashcardsDialog> {
+  Future<void> _deleteDeck(int index) async {
+    await FlashcardStorage.deleteAt(index);
+    if (!mounted) return;
+    setState(() {
+      widget.decks.removeAt(index);
+    });
+    if (widget.decks.isEmpty && mounted) {
+      Navigator.of(context).pop();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Dialog.fullscreen(
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Saved Flashcards',
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '${widget.decks.length} deck${widget.decks.length == 1 ? '' : 's'} saved',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: widget.decks.length,
+                  itemBuilder: (context, index) {
+                    final deck = widget.decks[index];
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: theme.colorScheme.primaryContainer,
+                          child: Text(
+                            '${deck.length}',
+                            style: TextStyle(
+                              color: theme.colorScheme.onPrimaryContainer,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        title: Text(
+                          'Deck ${index + 1}',
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        subtitle: Text(
+                          '${deck.length} card${deck.length == 1 ? '' : 's'}',
+                        ),
+                        trailing: IconButton(
+                          icon: Icon(
+                            Icons.delete_rounded,
+                            color: theme.colorScheme.error,
+                          ),
+                          onPressed: () => _deleteDeck(index),
+                        ),
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          showDialog<void>(
+                            context: context,
+                            builder: (context) =>
+                                _FlashcardsDialog(flashcards: deck),
+                          );
+                        },
+                      ),
+                    );
+                  },
+                ),
               ),
             ],
           ),

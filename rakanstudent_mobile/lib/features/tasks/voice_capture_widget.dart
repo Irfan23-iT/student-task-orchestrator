@@ -401,18 +401,21 @@ class _VoiceCaptureWidgetState extends State<VoiceCaptureWidget>
         _isSubmitting = false;
         _successMessage = null;
         _errorMessage =
-            'Voice task creation is taking too long. Please try again.';
+            'Voice task creation timed out. The server may be waking up — please try again.';
       });
     } catch (error) {
       if (!mounted) {
         return;
       }
 
+      final errorMsg = error.toString().contains('NOT_CONNECTED')
+          ? 'Connect Google Calendar first to use voice tasks.'
+          : 'Unable to create a task from voice. Please try again.';
       setState(() {
         _isFinalizing = false;
         _isSubmitting = false;
         _successMessage = null;
-        _errorMessage = 'Unable to create a task from voice. $error';
+        _errorMessage = errorMsg;
       });
     }
   }
