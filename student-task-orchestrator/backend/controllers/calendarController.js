@@ -224,11 +224,22 @@ export const bulkCreateFixedClasses = async (req, res) => {
       .select('*');
 
     if (result.error && isSchemaColumnError(result.error)) {
-      const leanPayload = insertPayload.map(({ location, lecturer, ...rest }) => rest);
-      result = await db
-        .from('fixed_classes')
-        .insert(leanPayload)
-        .select('*');
+      const inserted = [];
+      for (const item of insertPayload) {
+        const rpcResult = await db.rpc('insert_fixed_class', {
+          p_user_id: item.user_id,
+          p_day_of_week: item.day_of_week,
+          p_start_time: item.start_time,
+          p_end_time: item.end_time,
+          p_class_name: item.class_name,
+          p_class_type: item.class_type,
+          p_location: item.location,
+          p_lecturer: item.lecturer,
+        });
+        if (rpcResult.error) throw rpcResult.error;
+        if (rpcResult.data) inserted.push(rpcResult.data);
+      }
+      result = { data: inserted, error: null };
     }
 
     if (result.error) throw result.error;
@@ -282,14 +293,19 @@ export const updateFixedClass = async (req, res) => {
       .maybeSingle();
 
     if (result.error && isSchemaColumnError(result.error)) {
-      const { location, lecturer, ...leanPayload } = updatePayload;
-      result = await db
-        .from('fixed_classes')
-        .update(leanPayload)
-        .eq('id', classId)
-        .eq('user_id', req.user.id)
-        .select('*')
-        .maybeSingle();
+      const rpcResult = await db.rpc('update_fixed_class', {
+        p_class_id: classId,
+        p_user_id: req.user.id,
+        p_day_of_week: updatePayload.day_of_week,
+        p_start_time: updatePayload.start_time,
+        p_end_time: updatePayload.end_time,
+        p_class_name: updatePayload.class_name,
+        p_class_type: updatePayload.class_type,
+        p_location: updatePayload.location,
+        p_lecturer: updatePayload.lecturer,
+      });
+      if (rpcResult.error) throw rpcResult.error;
+      result = { data: rpcResult.data, error: null };
     }
 
     if (result.error) throw result.error;
