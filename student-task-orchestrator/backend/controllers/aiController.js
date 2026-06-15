@@ -1146,18 +1146,11 @@ export const chatWithAi = async (req, res) => {
 };
 
 const VOICE_TASK_PROMPT = [
-  'You are a task extraction engine. A student spoke a voice note. Extract exactly ONE task from it.',
-  'Return ONLY valid JSON. No markdown, no prose, no explanations.',
-  'The JSON must be exactly this shape:',
-  '{"title":"short task title","description":"brief description or null","due_date":"YYYY-MM-DD or null","due_time":"HH:MM or null","priority_level":"High|Medium|Low"}',
-  'Rules:',
-  '- title: concise action phrase (e.g. "Buy groceries", "Study for math exam")',
-  '- due_date: if the user says "tomorrow", "next Monday", "Friday", etc., resolve to an actual YYYY-MM-DD date relative to the current date provided below.',
-  '- due_time: extract if mentioned (e.g. "at 3pm" -> "15:00"), otherwise null.',
-  '- priority_level: High if urgent/exam/deadline, Medium if normal, Low if casual. Default Medium.',
-  '- If the voice note is NOT a task (e.g. a question or greeting), still extract a reasonable task from it.',
-  'Current date: {{CURRENT_DATE}}.',
-  'Current time: {{CURRENT_TIME}}.',
+  'Extract ONE task from the student voice note below.',
+  'Return ONLY a JSON object. No markdown fences. No explanation text. Just the raw JSON.',
+  'Schema: {"title":"string","due_date":"YYYY-MM-DD or null","priority_level":"High|Medium|Low"}',
+  'title = short action phrase. Resolve relative dates using today. Default priority: Medium.',
+  'Today: {{CURRENT_DATE}}.',
 ].join('\n');
 
 export const voiceToTask = async (req, res) => {
@@ -1180,11 +1173,9 @@ export const voiceToTask = async (req, res) => {
 
     const now = new Date();
     const currentDate = now.toISOString().slice(0, 10);
-    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
     const systemInstruction = VOICE_TASK_PROMPT
-      .replace('{{CURRENT_DATE}}', currentDate)
-      .replace('{{CURRENT_TIME}}', currentTime);
+      .replace('{{CURRENT_DATE}}', currentDate);
 
     let aiText;
     try {
@@ -1204,12 +1195,17 @@ export const voiceToTask = async (req, res) => {
 
     let parsed;
     try {
-      const cleaned = String(aiText || '').trim()
-        .replace(/^```(?:json)?\s*/i, '')
-        .replace(/\s*```$/i, '');
+      let cleaned = String(aiText || '').trim();
+      // Strip markdown fences
+      cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+      // If there's extra text around the JSON, extract just the {…} object
+      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        cleaned = jsonMatch[0];
+      }
       parsed = JSON.parse(cleaned);
-    } catch {
-      console.error('Voice task JSON parse failed. Raw:', aiText);
+    } catch (parseError) {
+      console.error('Voice task JSON parse failed. Raw:', aiText, 'Error:', parseError.message);
       return res.status(200).json({
         actionPerformed: false,
         message: 'I understood the note but could not structure it as a task.',
