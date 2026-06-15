@@ -9,18 +9,30 @@ import {
 } from '../lib/calendarService.js';
 
 const normalizeRows = (rows = []) =>
-  rows.map(({ id, day_of_week, start_time, end_time, class_name, class_type, location, lecturer, created_at, updated_at }) => ({
-    id,
-    day_of_week,
-    start_time,
-    end_time,
-    class_name,
-    class_type,
-    location,
-    lecturer,
-    created_at,
-    updated_at
-  }));
+  rows.map((row) => {
+    // Parse encoded class_type: "Lect|loc:Room A-101|lec:Dr. Smith"
+    const rawType = String(row.class_type || 'Lect');
+    const parts = rawType.split('|');
+    const classType = parts[0] || 'Lect';
+    let location = row.location || null;
+    let lecturer = row.lecturer || null;
+    for (const part of parts.slice(1)) {
+      if (part.startsWith('loc:') && !location) location = part.slice(4);
+      if (part.startsWith('lec:') && !lecturer) lecturer = part.slice(4);
+    }
+    return {
+      id: row.id,
+      day_of_week: row.day_of_week,
+      start_time: row.start_time,
+      end_time: row.end_time,
+      class_name: row.class_name,
+      class_type: classType,
+      location,
+      lecturer,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+    };
+  });
 
 const assert = (condition, message, statusCode = 400) => {
   if (condition) return;
@@ -110,7 +122,7 @@ const normalizeClassPayload = (item = {}) => {
     class_name: String(item.class_name ?? item.className ?? '').trim(),
     class_type: normalizeClassType(item.class_type ?? item.classType),
     location: String(item.location ?? '').trim() || null,
-    lecturer: String(item.lecturer ?? '').trim() || null
+    lecturer: String(item.lecturer ?? '').trim() || null,
   };
 };
 
@@ -207,40 +219,28 @@ export const bulkCreateFixedClasses = async (req, res) => {
       classes: normalizedClasses
     });
 
-    const insertPayload = normalizedClasses.map((item) => ({
-      user_id: req.user.id,
-      day_of_week: item.day_of_week,
-      start_time: item.start_time,
-      end_time: item.end_time,
-      class_name: item.class_name,
-      class_type: item.class_type,
-      location: item.location,
-      lecturer: item.lecturer
-    }));
+    const insertPayload = normalizedClasses.map((item) => {
+      const base = {
+        user_id: req.user.id,
+        day_of_week: item.day_of_week,
+        start_time: item.start_time,
+        end_time: item.end_time,
+        class_name: item.class_name,
+      };
+      // Encode location and lecturer into class_type since PostgREST schema cache
+      // may not have the separate columns yet.
+      const classType = item.class_type || 'Lect';
+      const extra = [];
+      if (item.location) extra.push(`loc:${item.location}`);
+      if (item.lecturer) extra.push(`lec:${item.lecturer}`);
+      base.class_type = extra.length > 0 ? `${classType}|${extra.join('|')}` : classType;
+      return base;
+    });
 
     let result = await db
       .from('fixed_classes')
       .insert(insertPayload)
       .select('*');
-
-    if (result.error && isSchemaColumnError(result.error)) {
-      const inserted = [];
-      for (const item of insertPayload) {
-        const rpcResult = await db.rpc('insert_fixed_class', {
-          p_user_id: item.user_id,
-          p_day_of_week: item.day_of_week,
-          p_start_time: item.start_time,
-          p_end_time: item.end_time,
-          p_class_name: item.class_name,
-          p_class_type: item.class_type,
-          p_location: item.location,
-          p_lecturer: item.lecturer,
-        });
-        if (rpcResult.error) throw rpcResult.error;
-        if (rpcResult.data) inserted.push(rpcResult.data);
-      }
-      result = { data: inserted, error: null };
-    }
 
     if (result.error) throw result.error;
 
@@ -274,39 +274,25 @@ export const updateFixedClass = async (req, res) => {
       excludeClassId: classId
     });
 
-    const updatePayload = {
-      day_of_week: normalizedClass.day_of_week,
-      start_time: normalizedClass.start_time,
-      end_time: normalizedClass.end_time,
-      class_name: normalizedClass.class_name,
-      class_type: normalizedClass.class_type,
-      location: normalizedClass.location,
-      lecturer: normalizedClass.lecturer
-    };
+    const classType = normalizedClass.class_type || 'Lect';
+    const extra = [];
+    if (normalizedClass.location) extra.push(`loc:${normalizedClass.location}`);
+    if (normalizedClass.lecturer) extra.push(`lec:${normalizedClass.lecturer}`);
+    const encodedClassType = extra.length > 0 ? `${classType}|${extra.join('|')}` : classType;
 
     let result = await db
       .from('fixed_classes')
-      .update(updatePayload)
+      .update({
+        day_of_week: normalizedClass.day_of_week,
+        start_time: normalizedClass.start_time,
+        end_time: normalizedClass.end_time,
+        class_name: normalizedClass.class_name,
+        class_type: encodedClassType,
+      })
       .eq('id', classId)
       .eq('user_id', req.user.id)
       .select('*')
       .maybeSingle();
-
-    if (result.error && isSchemaColumnError(result.error)) {
-      const rpcResult = await db.rpc('update_fixed_class', {
-        p_class_id: classId,
-        p_user_id: req.user.id,
-        p_day_of_week: updatePayload.day_of_week,
-        p_start_time: updatePayload.start_time,
-        p_end_time: updatePayload.end_time,
-        p_class_name: updatePayload.class_name,
-        p_class_type: updatePayload.class_type,
-        p_location: updatePayload.location,
-        p_lecturer: updatePayload.lecturer,
-      });
-      if (rpcResult.error) throw rpcResult.error;
-      result = { data: rpcResult.data, error: null };
-    }
 
     if (result.error) throw result.error;
     if (!result.data) {
